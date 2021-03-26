@@ -6,7 +6,6 @@ from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines import PPO2
 from matplotlib import pyplot as plt
 
-
 env = gym.make('droneGym-v0')
 
 def lrGenerator(t):
