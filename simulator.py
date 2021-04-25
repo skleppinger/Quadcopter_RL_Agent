@@ -120,8 +120,11 @@ class droneSim():
 
     def stateMatrixInit(self):
         x = np.zeros(12)
-        # x[2] = -.049
-        x[11] = .049
+        x[11] = 8#.049
+        # x[12] = 0#9.951
+        x[2] = np.random.random()*.6457718
+        x[3] = np.random.random()*.6457718
+        x[4] = np.random.random()*.6457718
         # x0 = xdot_b = latitudinal velocity body frame = u
         # x1 = ydot_b = latitudinal velocity body frame = v
         # x2 = zdot_b = latitudinal velocity body frame = w
@@ -320,24 +323,6 @@ class droneSim():
             u[3] = self.yawController.updateControl(errs[3])
         else:
             u = errs
-
-        # xdot, globalAccelerations = self.stateTransition2(x, u)
-        # x_next = x + xdot * dt
-        # x_next[6:] = x_next[6:] + .5 * globalAccelerations * dt**2
-
-        x_next = x + self.stateTransition(x, u) * dt
-
-        for i,n in enumerate(x_next):
-            if i in [0,1,2,9,10,11]:
-                continue
-            else:
-                if np.abs(n)>2*np.pi:
-                    x_next[i] = n % (2*np.pi)
-
-        return x_next, u
-
-    def numericalIntegrationWithU(self, x, u, dt):
-        # for now accept whatever we get from the derivative, maybe in future use Runge
 
         # xdot, globalAccelerations = self.stateTransition2(x, u)
         # x_next = x + xdot * dt

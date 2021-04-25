@@ -44,16 +44,18 @@ class droneGym(gym.Env):
             writer.writerow(['Time','Simulated Time','Failed on','Reward','Altitude (m)', 'Roll','Pitch','Yaw', 'X_distance','Y_distance'])
 
         # Define action and observation space
-        self.action_space = spaces.Box(low = np.array((0,0,0)), high = np.array((1,1,1)))
-        self.action_space.n = 3
+        self.action_space = spaces.Box(low = np.array((0,0,0,0)), high = np.array((1,1,1,1)))
+        self.action_space.n = 4
+
+        self.ds = droneSim()
 
         self.x = self.stateMatrixInit()
 
-        self.observation_space = spaces.Box(low=np.array((-100,-100,-100,0,0,0,0,0,0,-100,-100,-100,-100,-100,-100)), high=np.array((100,100,100,7,7,7,7,7,7,100,100,100,100,100,100)))
+        # self.observation_space = spaces.Box(low=np.array((-100,-100,-100,0,0,0,0,0,0,-100,-100,-100,-100,-100,-100)), high=np.array((100,100,100,7,7,7,7,7,7,100,100,100,100,100,100)))
+        self.observation_space = spaces.Box(low=np.array((-np.inf,-np.inf,-np.inf,-np.inf)), high=np.array((np.inf,np.inf,np.inf,np.inf)))
 
-
-        self.rateLimitUp = 2
-        self.rateLimitDown = 8
+        self.rateLimitUp = 4
+        self.rateLimitDown = 4#8
 
         self.reward_range = np.array((-np.inf,1))
 
@@ -89,7 +91,7 @@ class droneGym(gym.Env):
 
     def checkActionStepSize(self, action):
         #limit step-to-step action size (imitating motor inertia)
-        limitedActions = np.zeros(3)
+        limitedActions = np.zeros(4)
         for i,n in enumerate(action):
             diff = n - self.prevU[i]
             if diff > self.rateLimitUp:
@@ -107,7 +109,7 @@ class droneGym(gym.Env):
         errs[0] = action[0] - state[11]
         errs[1] = action[1] - state[6]
         errs[2] = action[2] - state[7]
-        errs[3] = 0 - state[8]
+        errs[3] = action[3] - state[8]
 
         u = np.zeros(4)
         bsZerr = self.zSet - state[11]
@@ -127,51 +129,70 @@ class droneGym(gym.Env):
         #Action[2] = Theta Reference Angle (y, in drone reference frame)
 
         maxAngleAllowed = .6457718 #around 37 degrees
-        if len(action) < 3:
-            newAct = np.zeros(3)
-            for i,n in enumerate(action):
-                newAct[i] = 1/(1+ np.exp(-n))
-            action = newAct
+        # if len(action) < 3:
+        #     newAct = np.zeros(3)
+        #     for i,n in enumerate(action):
+        #         newAct[i] = 1/(1+ np.exp(-n))
+        #     action = newAct
 
         # action[0] = (action[0]/200 + .5) * 100
         # action[0] = (action[0] -.5)*10 #Z velocity estimate?
-        action[0] = (action[0]) * 50 #Z position Target?
-        action[1:] = [(i-.5)*maxAngleAllowed for i in action[1:]]
+        # action[0] = (action[0]) * 50 #Z position Target?
+        # action[1:] = [(i-.5)*maxAngleAllowed for i in action[1:]]
+        self.action = action
+        action = action * 100
 
-        # action = self.checkActionStepSize(action)
+
+        action = self.checkActionStepSize(action)
 
         if np.isnan(action[0]):
             print('tt')
 
-        uActions = self.createUs(self.x, action)
+        # self.uActions = self.createUs(self.x, action)
+        # x_next = self.numericalIntegration(self.x,self.uActions,self.dt)
 
-        x_next = self.numericalIntegration(self.x,uActions,self.dt)
+        # x_next = self.numericalIntegration(self.x,action,self.dt)
+        self.ds.x = self.x[0:12]
+        tempX, currU = self.ds.numericalIntegration(self.x[0:12], action, self.dt, errsIsControl=True)
+        x_next = np.zeros(16)
+        x_next[0:12] = tempX
         self.t += self.dt
 
         if x_next[11] < .05:
             x_next[2] = np.min([self.x[2],x_next[2],0])
             x_next[11] = np.max([self.x[11],x_next[11],0])
 
-            x_next[3] = 0
-            x_next[4] = 0
-            x_next[5] = 0
+            # x_next[3] = 0
+            # x_next[4] = 0
+            # x_next[5] = 0
 
         reward, done = self.calcReward(self.x)
 
-        x_next[14] = x_next[11] - self.zSet
-        x_next[13] = x_next[10] - self.ySet
-        x_next[12] = x_next[9] - self.xSet
+        # x_next[14] = x_next[11] - self.zSet
+        # x_next[13] = x_next[10] - self.ySet
+        # x_next[12] = x_next[9] - self.xSet
+        x_next[14] = x_next[5] - self.angular_rate_sp[2]
+        x_next[13] = x_next[4] - self.angular_rate_sp[1]
+        x_next[12] = x_next[3] - self.angular_rate_sp[0]
 
+        x_next[15] = x_next[11] - 6
 
         self.x = x_next
-        self.memory(self.x, uActions)
+        self.memory(self.x, action)
 
-        return self.x, reward, done, {}
+        return self.add_noise(self.x[[12,13,14,15]]), reward, done, {}
 
+    def add_noise(self, x):
+
+        for i in range(0,len(x)):
+            x[i] = np.random.uniform(-.05,.05) * x[i] + x[i]
+
+        return x
 
     def reset(self):
         # Reset the state of the environment to an initial state
         self.t = 0
+        self.ds = droneSim()
         self.x = self.stateMatrixInit()
 
         self.times = [self.t]
@@ -209,7 +230,12 @@ class droneGym(gym.Env):
 
         self.prevDist = np.sqrt(self.xSetRandom**2 + self.ySetRandom**2)
 
-        return self.x
+        self.prev_shaping = None
+        self.prev_action = self.action_space.sample()
+        # self.angular_rate_sp = [np.random.random()*.6457718, np.random.random()*.6457718, np.random.random()*.6457718]
+        self.angular_rate_sp = [0,0,0]#
+
+        return self.x[[12,13,14,11]]
 
     def render(self, mode='human', close=False, epNum = 0):
         # Render the environment to the screen
@@ -284,31 +310,65 @@ class droneGym(gym.Env):
 
         # reward_unlog = 2.23606797749979 - np.sqrt(self.distin3d(state[9], state[10], state[11], xSet, ySet, zSet)) #sqrt of 0,0,5 position
         # reward = 10 * (np.exp(reward_unlog)/(np.exp(reward_unlog) + 1) - .5)
-        dist = self.distin3d(state[9], state[10], state[11], xSet, ySet, zSet)  # sqrt of 0,0,5 position
-        dist2d = self.distin3d(state[9], state[10], zSet, xSet, ySet, zSet)
-        # reward = round(reward)
-        # reward = -np.clip(np.sum(np.abs([(state[n]-totRefs[i]) for i,n in enumerate([6,7,8])])),0,1)
-        reward = -1 + 10*(self.prevDist-dist2d)#/(np.sqrt(self.xSet**2 + self.ySet**2))
-
-        self.prevDist = dist2d
-        maxAngleAllowed = 1#0.5745329
+        # dist = self.distin3d(state[9], state[10], state[11], xSet, ySet, zSet)  # sqrt of 0,0,5 position
+        # dist2d = self.distin3d(state[9], state[10], zSet, xSet, ySet, zSet)
+        # # reward = round(reward)
+        # # reward = -np.clip(np.sum(np.abs([(state[n]-totRefs[i]) for i,n in enumerate([6,7,8])])),0,1)
+        # reward = -1 + 10*(self.prevDist-dist2d)#/(np.sqrt(self.xSet**2 + self.ySet**2))
+        #
+        # self.prevDist = dist2d
+        maxAngleAllowed = 0.5745329
         # pitch_bad = not(-maxAngleAllowed < state[6] < maxAngleAllowed) and self.t > .4
         # roll_bad = not(-maxAngleAllowed < state[7] < maxAngleAllowed) and self.t > .4
         roll_bad = ((2*np.pi)-maxAngleAllowed) > state[6] > maxAngleAllowed and self.t > .4
         pitch_bad = ((2*np.pi)-maxAngleAllowed) > state[7] > maxAngleAllowed and self.t > .4
-        alt_bad = not(.05 < state[11] < 100) and self.t > 1
+        alt_bad = not(.1 < state[11] < 100) and self.t > 1
+        #
+        # self.rewardList.append(reward)
+        # goodDist = 3 #in m
 
+        self.angular_rate_sp = np.zeros(3)
+        self.true_error = self.angular_rate_sp - np.array([state[3], state[4], state[5]])
+        shaping = -np.sum(self.true_error**2)
+
+        e_penalty = 0
+        if self.prev_shaping is not None:
+            e_penalty = shaping - self.prev_shaping
+        self.prev_shaping = shaping
+
+        min_y_reward = 0
+
+        threshold = np.maximum(np.abs(self.angular_rate_sp) * 0.1, np.array([5]*3))
+        inband = (np.abs(self.true_error) <= threshold).all()
+        percent_idle = 0.12
+        max_min_y_reward = 1000
+        if np.average(self.action) < percent_idle:
+            min_y_reward = max_min_y_reward * (1 - percent_idle) * inband
+        else:
+            min_y_reward = max_min_y_reward * (1 - np.average(self.action)) * inband
+
+        rewards = [
+            -1000 * np.max(np.abs(self.action - self.prev_action)),
+            min_y_reward,
+            800*e_penalty,
+            -1e4 * np.sum(self.oversaturation_high()),
+            self.doing_nothing_penalty(),
+            self.on_the_ground_penalty(state)
+        ]
+
+        reward = np.sum(rewards)
         self.rewardList.append(reward)
-        goodDist = 3 #in m
 
-        if self.t > 12 or pitch_bad or roll_bad or alt_bad or dist<goodDist:
+        self.prev_action = self.action
+
+        if self.t > 6: #or pitch_bad or roll_bad or alt_bad:# or dist<goodDist:
             # if self.t > 9.8:
-            #     # reward = 400
-            #     reward = 1
+            #     reward = 400
+            #     # reward = 1
             #     self.rewardList.append(reward)
             # else:
-            #     # reward = -200
-            #     reward = -10
+            #     reward = 10000*self.t - 4000
+            #     # reward = -10
             #     self.rewardList.append(reward)
             done = True
 
@@ -319,9 +379,9 @@ class droneGym(gym.Env):
                 failer += 'Roll'
             if alt_bad:
                 failer += "Alt"
-            if dist<goodDist:
-                failer += "Dist"
-                reward = 80
+            # if dist<goodDist:
+            #     failer += "Dist"
+            #     reward = 80
 
 
             with open(self.diagPath, 'a', newline = '') as csvFile:
@@ -330,9 +390,31 @@ class droneGym(gym.Env):
                 writer.writerow([round(time.time()-self.startTime,1), round(self.t,2), failer, round(totReward/self.t,3),
                                  round(state[11],3),round(state[6],3),round(state[7],3),round(state[8],3), np.ceil(state[12]), np.ceil(state[13])])
 
+        return reward/10000000, done
 
+    def on_the_ground_penalty(self, state, penalty = 1e3):
+        total_penalty = 0
 
-        return reward, done
+        if state[11] < .06 and self.t > .15:
+            total_penalty -= penalty
+
+        return total_penalty
+
+    def doing_nothing_penalty(self, penalty=1e4):
+        total_penalty = 0
+
+        if np.sum(self.action == 0) > 2:# and not (self.angular_rate_sp == np.zeros(3)).all():
+            total_penalty -= penalty
+
+        if (self.action ==1).all():
+            total_penalty -= penalty
+
+        return total_penalty
+
+    def oversaturation_high(self):
+
+        ac = np.maximum(self.action, np.zeros(4))
+        return np.maximum(ac - np.ones(4), np.zeros(4))
 
 
     def distin3d(self,x1,y1,z1,x2,y2,z2):
@@ -357,13 +439,16 @@ class droneGym(gym.Env):
         self.u1.append(action[0])
         self.u2.append(action[1])
         self.u3.append(action[2])
-        self.u4.append(0)
+        self.u4.append(action[3])
 
     def stateMatrixInit(self):
-        x = np.zeros(15)
+        x = np.zeros(16)
         # x[2] = -.049
-        x[11] = .049
-        x[12] = 9.951
+        x[11] = 8#.049
+        x[12] = 0#9.951
+        x[2] = np.random.random()*.6457718
+        x[3] = np.random.random()*.6457718
+        x[4] = np.random.random()*.6457718
         # x0 = xdot_b = latitudinal velocity body frame
         # x1 = ydot_b = latitudinal velocity body frame
         # x2 = zdot_b = latitudinal velocity body frame
@@ -403,7 +488,7 @@ class droneGym(gym.Env):
         return F1, F2, F3, F4
 
     def stateTransition(self, x, u):
-        xdot = np.zeros(15)
+        xdot = np.zeros(16)
 
         # Store values in a readable format
         ub = x[0]
@@ -426,7 +511,6 @@ class droneGym(gym.Env):
         # F3 = u#Fthrust(x, u[2], dx, -dy)
         # F4 = u#Fthrust(x, u[3], -dx, dy)
         Fz = F1 + F2 + F3 + F4
-        self.temp.append(Fz)
 
         L = dy * (F4 - F2)
         M = dx * (F1 - F3)
@@ -460,6 +544,7 @@ class droneGym(gym.Env):
         xdot[12] = x[12]
         xdot[13] = x[13]
         xdot[14] = x[14]
+        xdot[15] = x[15]
 
 
         return xdot
