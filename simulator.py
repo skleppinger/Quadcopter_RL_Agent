@@ -38,10 +38,10 @@ def plotStuff(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z, 
 
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
-    ax1.plot(times, u1, '.', label='u1')
-    ax1.plot(times, u2, '.', label='u2')
-    ax1.plot(times, u3, '.', label='u3')
-    ax1.plot(times, u4, '.', label='u4')
+    ax1.plot(times, u1 + .01, '.', label='u1')
+    ax1.plot(times, u2 + .02, '.', label='u2')
+    ax1.plot(times, u3 - .01, '.', label='u3')
+    ax1.plot(times, u4 - .02, '.', label='u4')
     ax1.legend()
     ax1.set_title('Control Signals' + title)
 
@@ -330,12 +330,12 @@ class droneSim():
 
         x_next = x + self.stateTransition(x, u) * dt
 
-        for i,n in enumerate(x_next):
-            if i in [0,1,2,9,10,11]:
-                continue
-            else:
-                if np.abs(n)>2*np.pi:
-                    x_next[i] = n % (2*np.pi)
+        # for i,n in enumerate(x_next):
+        #     if i in [0,1,2,9,10,11]:
+        #         continue
+        #     else:
+        #         if np.abs(n)>2*np.pi:
+        #             x_next[i] = n % (2*np.pi)
 
         return x_next, u
 

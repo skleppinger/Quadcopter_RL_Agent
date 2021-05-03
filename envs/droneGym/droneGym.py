@@ -44,8 +44,12 @@ class droneGym(gym.Env):
             writer.writerow(['Time','Simulated Time','Failed on','Reward','Altitude (m)', 'Roll','Pitch','Yaw', 'X_distance','Y_distance'])
 
         # Define action and observation space
-        self.action_space = spaces.Box(low = np.array((0,0,0,0)), high = np.array((1,1,1,1)))
-        self.action_space.n = 4
+        # self.action_space = spaces.Box(low = np.array((0,0,0,0)), high = np.array((1,1,1,1)))
+        self.action_space = spaces.Box(low = np.array((0,0,0)), high = np.array((1,1,1)))
+        # self.action_space = spaces.Box(low = np.array((0,0,0,0)), high = np.array((100,100,100,100)))
+        # self.action_space = spaces.Tuple((spaces.Discrete(2),spaces.Discrete(2),spaces.Discrete(2),spaces.Discrete(2)))
+
+        self.action_space.n = 3
 
         self.ds = droneSim()
 
@@ -103,6 +107,8 @@ class droneGym(gym.Env):
 
         self.prevU = limitedActions
         return limitedActions
+        # return action
+
 
     def createUs(self, state, action):
         errs = np.zeros(4)
@@ -139,11 +145,13 @@ class droneGym(gym.Env):
         # action[0] = (action[0] -.5)*10 #Z velocity estimate?
         # action[0] = (action[0]) * 50 #Z position Target?
         # action[1:] = [(i-.5)*maxAngleAllowed for i in action[1:]]
+        # action = np.append(action,0)
+        temp = action
         self.action = action
         action = action * 100
 
-
         action = self.checkActionStepSize(action)
+        temp = action
 
         if np.isnan(action[0]):
             print('tt')
@@ -178,7 +186,7 @@ class droneGym(gym.Env):
         x_next[15] = x_next[11] - 6
 
         self.x = x_next
-        self.memory(self.x, action)
+        self.memory(self.x, temp)
 
         return self.add_noise(self.x[[12,13,14,15]]), reward, done, {}
 
@@ -231,7 +239,7 @@ class droneGym(gym.Env):
         self.prevDist = np.sqrt(self.xSetRandom**2 + self.ySetRandom**2)
 
         self.prev_shaping = None
-        self.prev_action = self.action_space.sample()
+        self.prev_action = np.zeros(self.action_space.n)#self.action_space.sample()
         # self.angular_rate_sp = [np.random.random()*.6457718, np.random.random()*.6457718, np.random.random()*.6457718]
         self.angular_rate_sp = [0,0,0]#
 
@@ -244,12 +252,12 @@ class droneGym(gym.Env):
         df = pd.DataFrame(list(zip(self.times, self.xdot_b, self.ydot_b, self.zdot_b, self.p, self.q, self.r, self.phi, self.theta, self.psi, self.xpos, self.y, self.z)),
                           columns=['t', 'xdot_b', 'ydot_b', 'zdot_b', 'p', 'q', 'r', 'phi', 'theta', 'psi', 'x', 'y',
                                    'z'])
-        self.u1 = np.zeros(len(self.u1)) + 1
+        # self.u1 = np.zeros(len(self.u1)) + 1
         self.u4 = np.zeros(len(self.u4)) + 1
 
 
         dfAction = pd.DataFrame(list(zip(self.u1, self.u2, self.u3, self.u4)), columns = ['U1','U2','U3','U4'])
-        with open(os.path.join(os.getcwd(),newfileName + '.js'), 'w') as outfile:
+        with open(os.path.join(r'C:\Users\Stephen\PycharmProjects\QuadcopterSim\visualizer',newfileName + '.js'), 'w') as outfile:
             outfile.truncate(0)
             outfile.write("var sim_data = [ \n")
             json.dump([i for i in self.times[0:-1]], outfile, indent=4)
@@ -338,7 +346,7 @@ class droneGym(gym.Env):
 
         min_y_reward = 0
 
-        threshold = np.maximum(np.abs(self.angular_rate_sp) * 0.1, np.array([5]*3))
+        threshold = np.maximum(np.abs(self.angular_rate_sp) * 0.1, np.array([2]*3))
         inband = (np.abs(self.true_error) <= threshold).all()
         percent_idle = 0.12
         max_min_y_reward = 1000
@@ -347,19 +355,25 @@ class droneGym(gym.Env):
         else:
             min_y_reward = max_min_y_reward * (1 - np.average(self.action)) * inband
 
+        if roll_bad or pitch_bad:
+            angleThreshPunishment = -100
+        else:
+            angleThreshPunishment = 0
+
         rewards = [
             -1000 * np.max(np.abs(self.action - self.prev_action)),
             min_y_reward,
-            800*e_penalty,
-            -1e4 * np.sum(self.oversaturation_high()),
+            angleThreshPunishment,
+            500*e_penalty,
+            -1e9 * np.sum(self.oversaturation_high()),
             self.doing_nothing_penalty(),
-            self.on_the_ground_penalty(state)
+            self.on_the_ground_penalty(state),
+            self.repeatedActionsPenalty(self.action, self.prev_action)
         ]
 
         reward = np.sum(rewards)
         self.rewardList.append(reward)
 
-        self.prev_action = self.action
 
         if self.t > 6: #or pitch_bad or roll_bad or alt_bad:# or dist<goodDist:
             # if self.t > 9.8:
@@ -390,7 +404,17 @@ class droneGym(gym.Env):
                 writer.writerow([round(time.time()-self.startTime,1), round(self.t,2), failer, round(totReward/self.t,3),
                                  round(state[11],3),round(state[6],3),round(state[7],3),round(state[8],3), np.ceil(state[12]), np.ceil(state[13])])
 
+        self.prev_action = self.action
+
         return reward/10000000, done
+
+    def repeatedActionsPenalty(self,action, prevAction, penalty=1e4):
+        numInfring = 0
+        for i, n in enumerate(action):
+            if n == prevAction[i]:
+                numInfring += 1
+
+        return numInfring*penalty
 
     def on_the_ground_penalty(self, state, penalty = 1e3):
         total_penalty = 0
@@ -403,7 +427,7 @@ class droneGym(gym.Env):
     def doing_nothing_penalty(self, penalty=1e4):
         total_penalty = 0
 
-        if np.sum(self.action == 0) > 2:# and not (self.angular_rate_sp == np.zeros(3)).all():
+        if np.sum(self.action == 0) > 1:# and not (self.angular_rate_sp == np.zeros(3)).all():
             total_penalty -= penalty
 
         if (self.action ==1).all():
@@ -413,9 +437,12 @@ class droneGym(gym.Env):
 
     def oversaturation_high(self):
 
-        ac = np.maximum(self.action, np.zeros(4))
-        return np.maximum(ac - np.ones(4), np.zeros(4))
-
+        ac = np.maximum(self.action, np.zeros(self.action_space.n))
+        # return np.maximum(ac - np.ones(4), np.zeros(4))
+        if len(np.where(ac == 1)[0]) > 1:
+            return 1
+        else:
+            return 0
 
     def distin3d(self,x1,y1,z1,x2,y2,z2):
         #calculate distance in 3d space
@@ -439,16 +466,18 @@ class droneGym(gym.Env):
         self.u1.append(action[0])
         self.u2.append(action[1])
         self.u3.append(action[2])
-        self.u4.append(action[3])
+        # self.u4.append(action[3])
+        self.u4.append(0)
+
 
     def stateMatrixInit(self):
         x = np.zeros(16)
         # x[2] = -.049
         x[11] = 8#.049
         x[12] = 0#9.951
-        x[2] = np.random.random()*.6457718
-        x[3] = np.random.random()*.6457718
-        x[4] = np.random.random()*.6457718
+        x[3] = np.random.random()*.9457718
+        x[4] = np.random.random()*.9457718
+        # x[5] = np.random.random()*.3457718
         # x0 = xdot_b = latitudinal velocity body frame
         # x1 = ydot_b = latitudinal velocity body frame
         # x2 = zdot_b = latitudinal velocity body frame
@@ -463,108 +492,108 @@ class droneGym(gym.Env):
         # x11 = z = global z position
         return x
 
-    def processControlInputs(self, u):
-
-        #linearized motor response
-        w_o = np.zeros(4)
-        thrustForce = np.zeros(4)
-
-        modifyDef = 100000   #initial Val = 10000000
-        lesDef = .013385701848569465 * modifyDef
-
-        for i,n in enumerate(u):
-            # thrustForce[i] = .447675* n / 10
-            try:
-                w_o[i] = modifyDef *(-2/(1+np.e**((n/10)-5)) + 2) - lesDef #rough log equation mapping control signal (voltage) to rps
-            except FloatingPointError as e:
-                w_o[i] = modifyDef
-            thrustForce[i] = thrustCoef * w_o[i]
-
-        F1 = thrustForce[0] + thrustForce[2] + thrustForce[3]/2
-        F2 = thrustForce[0] - thrustForce[1] - thrustForce[3]/2
-        F3 = thrustForce[0] - thrustForce[2] + thrustForce[3]/2
-        F4 = thrustForce[0] + thrustForce[1] - thrustForce[3]/2
-
-        return F1, F2, F3, F4
-
-    def stateTransition(self, x, u):
-        xdot = np.zeros(16)
-
-        # Store values in a readable format
-        ub = x[0]
-        vb = x[1]
-        wb = x[2]
-        p = x[3]
-        q = x[4]
-        r = x[5]
-        phi = x[6]
-        theta = x[7]
-        psi = x[8]
-        xE = x[9]
-        yE = x[10]
-        hE = x[11]
-
-        F1, F2, F3, F4 = self.processControlInputs(u)
-        # Calculate forces from propeller inputs
-        # F1 = u#Fthrust(x, u[0], dx, dy)
-        # F2 = u#Fthrust(x, u[1], -dx, -dy)
-        # F3 = u#Fthrust(x, u[2], dx, -dy)
-        # F4 = u#Fthrust(x, u[3], -dx, dy)
-        Fz = F1 + F2 + F3 + F4
-
-        L = dy * (F4 - F2)
-        M = dx * (F1 - F3)
-        N = .01 * (F1 - F2 + F3 - F4)  # .01 = drag coef?  random scaling for yaw
-
-        # Pre-calculate trig values
-        cphi = np.cos(phi)
-        sphi = np.sin(phi)
-        cthe = np.cos(theta)
-        sthe = np.sin(theta)
-        cpsi = np.cos(psi)
-        spsi = np.sin(psi)
-
-        # Calculate the derivative of the state matrix using EOM
-        xdot[0] = (1/m) * (g*sthe)
-        xdot[1] = g * sphi / m
-        xdot[2] = (1 / m) * (-Fz) + (g * cphi * cthe)
-        xdot[3] = 1 / Ixx * (L + (Iyy - Izz) * q * r)  # = pdot
-        xdot[4] = 1 / Iyy * (M + (Izz - Ixx) * p * r)  # = qdot
-        xdot[5] = 1 / Izz * (N + (Ixx - Iyy) * p * q)  # = rdot
-        xdot[6] = p + (q * sphi + r * cphi) * sthe / cthe  # = phidot
-        xdot[7] = q * cphi - r * sphi  # = thetadot
-        xdot[8] = (q * sphi + r * cphi) / cthe  # = psidot
-        xdot[9] = cthe * cpsi * ub + (-cthe * spsi + sphi * sthe * cpsi) * vb + \
-                  (sphi * spsi + cphi * sthe * cpsi) * wb  # = xEdot
-        xdot[10] = cthe * spsi * ub + (cphi * cpsi + sphi * sthe * spsi) * vb + \
-                   (-sphi * cpsi + cphi * sthe * spsi) * wb  # = yEdot
-        xdot[11] = -1 * (-sthe * ub + sphi * cthe * vb + cphi * cthe * wb)  # = zEdot
-
-        #keep the target setpoints the same for now
-        xdot[12] = x[12]
-        xdot[13] = x[13]
-        xdot[14] = x[14]
-        xdot[15] = x[15]
-
-
-        return xdot
-
-    def numericalIntegration(self, x, action, dt):
-        # for now accept whatever we get from the derivative, maybe in future use Runge
-        x_next = x + self.stateTransition(x, action) * dt
-
-        for i,n in enumerate(x_next):
-            if i in [0,1,2,9,10,11,12,13,14]:
-                continue
-            else:
-                if np.abs(n)>2*np.pi:
-                    x_next[i] = n % (2*np.pi)
-
-        if np.sum(np.isnan(x_next)):
-            print('tt')
-
-        return x_next
-
+    # def processControlInputs(self, u):
+    #
+    #     #linearized motor response
+    #     w_o = np.zeros(4)
+    #     thrustForce = np.zeros(4)
+    #
+    #     modifyDef = 100000   #initial Val = 10000000
+    #     lesDef = .013385701848569465 * modifyDef
+    #
+    #     for i,n in enumerate(u):
+    #         # thrustForce[i] = .447675* n / 10
+    #         try:
+    #             w_o[i] = modifyDef *(-2/(1+np.e**((n/10)-5)) + 2) - lesDef #rough log equation mapping control signal (voltage) to rps
+    #         except FloatingPointError as e:
+    #             w_o[i] = modifyDef
+    #         thrustForce[i] = thrustCoef * w_o[i]
+    #
+    #     F1 = thrustForce[0] + thrustForce[2] + thrustForce[3]/2
+    #     F2 = thrustForce[0] - thrustForce[1] - thrustForce[3]/2
+    #     F3 = thrustForce[0] - thrustForce[2] + thrustForce[3]/2
+    #     F4 = thrustForce[0] + thrustForce[1] - thrustForce[3]/2
+    #
+    #     return F1, F2, F3, F4
+    #
+    # def stateTransition(self, x, u):
+    #     xdot = np.zeros(16)
+    #
+    #     # Store values in a readable format
+    #     ub = x[0]
+    #     vb = x[1]
+    #     wb = x[2]
+    #     p = x[3]
+    #     q = x[4]
+    #     r = x[5]
+    #     phi = x[6]
+    #     theta = x[7]
+    #     psi = x[8]
+    #     xE = x[9]
+    #     yE = x[10]
+    #     hE = x[11]
+    #
+    #     F1, F2, F3, F4 = self.processControlInputs(u)
+    #     # Calculate forces from propeller inputs
+    #     # F1 = u#Fthrust(x, u[0], dx, dy)
+    #     # F2 = u#Fthrust(x, u[1], -dx, -dy)
+    #     # F3 = u#Fthrust(x, u[2], dx, -dy)
+    #     # F4 = u#Fthrust(x, u[3], -dx, dy)
+    #     Fz = F1 + F2 + F3 + F4
+    #
+    #     L = dy * (F4 - F2)
+    #     M = dx * (F1 - F3)
+    #     N = .01 * (F1 - F2 + F3 - F4)  # .01 = drag coef?  random scaling for yaw
+    #
+    #     # Pre-calculate trig values
+    #     cphi = np.cos(phi)
+    #     sphi = np.sin(phi)
+    #     cthe = np.cos(theta)
+    #     sthe = np.sin(theta)
+    #     cpsi = np.cos(psi)
+    #     spsi = np.sin(psi)
+    #
+    #     # Calculate the derivative of the state matrix using EOM
+    #     xdot[0] = (1/m) * (g*sthe)
+    #     xdot[1] = g * sphi / m
+    #     xdot[2] = (1 / m) * (-Fz) + (g * cphi * cthe)
+    #     xdot[3] = 1 / Ixx * (L + (Iyy - Izz) * q * r)  # = pdot
+    #     xdot[4] = 1 / Iyy * (M + (Izz - Ixx) * p * r)  # = qdot
+    #     xdot[5] = 1 / Izz * (N + (Ixx - Iyy) * p * q)  # = rdot
+    #     xdot[6] = p + (q * sphi + r * cphi) * sthe / cthe  # = phidot
+    #     xdot[7] = q * cphi - r * sphi  # = thetadot
+    #     xdot[8] = (q * sphi + r * cphi) / cthe  # = psidot
+    #     xdot[9] = cthe * cpsi * ub + (-cthe * spsi + sphi * sthe * cpsi) * vb + \
+    #               (sphi * spsi + cphi * sthe * cpsi) * wb  # = xEdot
+    #     xdot[10] = cthe * spsi * ub + (cphi * cpsi + sphi * sthe * spsi) * vb + \
+    #                (-sphi * cpsi + cphi * sthe * spsi) * wb  # = yEdot
+    #     xdot[11] = -1 * (-sthe * ub + sphi * cthe * vb + cphi * cthe * wb)  # = zEdot
+    #
+    #     #keep the target setpoints the same for now
+    #     xdot[12] = x[12]
+    #     xdot[13] = x[13]
+    #     xdot[14] = x[14]
+    #     xdot[15] = x[15]
+    #
+    #
+    #     return xdot
+    #
+    # def numericalIntegration(self, x, action, dt):
+    #     # for now accept whatever we get from the derivative, maybe in future use Runge
+    #     x_next = x + self.stateTransition(x, action) * dt
+    #
+    #     for i,n in enumerate(x_next):
+    #         if i in [0,1,2,9,10,11,12,13,14]:
+    #             continue
+    #         else:
+    #             if np.abs(n)>2*np.pi:
+    #                 x_next[i] = n % (2*np.pi)
+    #
+    #     if np.sum(np.isnan(x_next)):
+    #         print('tt')
+    #
+    #     return x_next
+    #
     def globalNeededThrust(self,x, u_x, u_y):
         #from https://liu.diva-portal.org/smash/get/diva2:1129641/FULLTEXT01.pdf, page 48
 

@@ -15,28 +15,38 @@ env = gym.make('droneGym-v0')
 class CustomPolicy(ActorCriticPolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=False, **kwargs):
         super(CustomPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=reuse, scale=True)
+        self._is_graph_network = True
 
         with tf.compat.v1.variable_scope("model", reuse=reuse):
-            activ = tf.nn.sigmoid
+            activ = tf.nn.relu
 
-            pi_latent2, vf_latent2 = mlp_extractor(self.processed_obs,net_arch = [128, dict(vf=[156, 156], pi=[128])], act_fun = tf.nn.relu, **kwargs)
-            actionSpace = tf.compat.v1.layers.dense(pi_latent2, ac_space.n, activation= 'sigmoid', name = 'pf')
-            value_fn = tf.compat.v1.layers.dense(vf_latent2, 1, name='vf')
-            vf_latent = vf_latent2
+            # pi_latent2, vf_latent2 = mlp_extractor(self.processed_obs,net_arch = [128, dict(vf=[156, 156], pi=[128])], act_fun = tf.nn.relu, **kwargs)
+            # actionSpace = tf.compat.v1.layers.dense(pi_latent2, ac_space.n, activation= 'sigmoid', name = 'pf')
+            # value_fn = tf.compat.v1.layers.dense(vf_latent2, 1, name='vf')
+            # vf_latent = vf_latent2
 
-            # pi_h = extracted_features
-            # for i, layer_size in enumerate([128, 128, 128]):
-            #     pi_h = activ(tf.compat.v1.layers.dense(pi_h, layer_size, name='pi_fc' + str(i)))
-            # pi_latent = pi_h
-            #
-            # vf_h = extracted_features
-            # for i, layer_size in enumerate([32, 32]):
-            #     vf_h = activ(tf.compat.v1.layers.dense(vf_h, layer_size, name='vf_fc' + str(i)))
-            # value_fn = tf.compat.v1.layers.dense(vf_h, 1, name='vf')
-            # vf_latent = vf_h
+            shapesShared = [256]
+            extracted_features = mlp_extractor(self.processed_obs, shapesShared, activ)
+            # extracted_features = mlp_extractor(extracted_features, shapesShared, activ)
+
+            pi_h = extracted_features[0]
+            shapesp = [128, 64]
+            for i, layer_size in enumerate(shapesp):
+                if i == len(shapesp)-1:
+                    pi_h = tf.nn.sigmoid(tf.layers.dense(pi_h, layer_size, name='pi_fc' + str(i)))
+                else:
+                    pi_h = activ(tf.layers.dense(pi_h, layer_size, name='pi_fc' + str(i)))
+            pi_latent = pi_h
+
+            vf_h = extracted_features[1]
+            shapesv = [64,64]
+            for i, layer_size in enumerate(shapesv):
+                vf_h = activ(tf.compat.v1.layers.dense(vf_h, layer_size, name='vf_fc' + str(i)))
+            value_fn = tf.compat.v1.layers.dense(vf_h, 1, name='vf')
+            vf_latent = vf_h
 
             self._proba_distribution, self._policy, self.q_value = \
-                self.pdtype.proba_distribution_from_latent(actionSpace, vf_latent, init_scale=0.01)
+                self.pdtype.proba_distribution_from_latent(pi_latent, vf_latent, init_scale=0.01)
 
         self._value_fn = value_fn
         self._setup_init()
@@ -65,7 +75,7 @@ def lrGenerator(t):
 env = gym.make('droneGym-v0')
 
 # model = PPO2(MlpPolicy, env, verbose = 0,n_steps = 3000, nminibatches=1,tensorboard_log="./drone_tensorboard/")
-model = PPO2(CustomPolicy, env, verbose = 0,n_steps = 3000, nminibatches=1,tensorboard_log="./drone_tensorboard/")
+model = PPO2(CustomPolicy, env, verbose = 0, n_steps = 3000, nminibatches=1,tensorboard_log="./drone_tensorboard/")
 # model = model.load('newRewardFunction.zip')
 model.full_tensorboard_log = True
 model.tensorboard_log = "./drone_tensorboard/"
