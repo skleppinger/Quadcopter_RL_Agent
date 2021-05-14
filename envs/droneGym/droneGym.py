@@ -147,11 +147,13 @@ class droneGym(gym.Env):
         # action[1:] = [(i-.5)*maxAngleAllowed for i in action[1:]]
         # action = np.append(action,0)
         temp = action
-        self.action = action
+        self.actionnn = action
         action = action * 100
+        action[1:] = action[1:] - 50
+        temp = action
 
         action = self.checkActionStepSize(action)
-        temp = action
+        self.actionActual = action[0:3]
 
         if np.isnan(action[0]):
             print('tt')
@@ -336,7 +338,8 @@ class droneGym(gym.Env):
         # goodDist = 3 #in m
 
         self.angular_rate_sp = np.zeros(3)
-        self.true_error = self.angular_rate_sp - np.array([state[3], state[4], state[5]])
+        # self.true_error = self.angular_rate_sp - np.array([state[3], state[4], state[5]])
+        self.true_error = self.angular_rate_sp - np.array([state[6], state[7], state[8]])
         shaping = -np.sum(self.true_error**2)
 
         e_penalty = 0
@@ -350,10 +353,10 @@ class droneGym(gym.Env):
         inband = (np.abs(self.true_error) <= threshold).all()
         percent_idle = 0.12
         max_min_y_reward = 1000
-        if np.average(self.action) < percent_idle:
+        if np.average(self.actionnn) < percent_idle:
             min_y_reward = max_min_y_reward * (1 - percent_idle) * inband
         else:
-            min_y_reward = max_min_y_reward * (1 - np.average(self.action)) * inband
+            min_y_reward = max_min_y_reward * (1 - np.average(self.actionnn)) * inband
 
         if roll_bad or pitch_bad:
             angleThreshPunishment = -100
@@ -361,14 +364,14 @@ class droneGym(gym.Env):
             angleThreshPunishment = 0
 
         rewards = [
-            -1000 * np.max(np.abs(self.action - self.prev_action)),
+            -100 * np.max(np.abs(self.actionActual - self.prev_action)),
             min_y_reward,
             angleThreshPunishment,
-            500*e_penalty,
+            10000000*e_penalty,
             -1e9 * np.sum(self.oversaturation_high()),
             self.doing_nothing_penalty(),
             self.on_the_ground_penalty(state),
-            self.repeatedActionsPenalty(self.action, self.prev_action)
+            self.repeatedActionsPenalty(self.actionActual, self.prev_action)
         ]
 
         reward = np.sum(rewards)
@@ -404,11 +407,11 @@ class droneGym(gym.Env):
                 writer.writerow([round(time.time()-self.startTime,1), round(self.t,2), failer, round(totReward/self.t,3),
                                  round(state[11],3),round(state[6],3),round(state[7],3),round(state[8],3), np.ceil(state[12]), np.ceil(state[13])])
 
-        self.prev_action = self.action
+        self.prev_action = self.actionActual
 
         return reward/10000000, done
 
-    def repeatedActionsPenalty(self,action, prevAction, penalty=1e4):
+    def repeatedActionsPenalty(self,action, prevAction, penalty=1e5):
         numInfring = 0
         for i, n in enumerate(action):
             if n == prevAction[i]:
@@ -416,7 +419,7 @@ class droneGym(gym.Env):
 
         return numInfring*penalty
 
-    def on_the_ground_penalty(self, state, penalty = 1e3):
+    def on_the_ground_penalty(self, state, penalty = 1e4):
         total_penalty = 0
 
         if state[11] < .06 and self.t > .15:
@@ -424,22 +427,22 @@ class droneGym(gym.Env):
 
         return total_penalty
 
-    def doing_nothing_penalty(self, penalty=1e4):
+    def doing_nothing_penalty(self, penalty=1e6):
         total_penalty = 0
 
-        if np.sum(self.action == 0) > 1:# and not (self.angular_rate_sp == np.zeros(3)).all():
+        if np.sum(self.actionnn == 0) > 1:# and not (self.angular_rate_sp == np.zeros(3)).all():
             total_penalty -= penalty
 
-        if (self.action ==1).all():
+        if (self.actionnn ==1).all():
             total_penalty -= penalty
 
         return total_penalty
 
     def oversaturation_high(self):
 
-        ac = np.maximum(self.action, np.zeros(self.action_space.n))
+        ac = np.maximum(self.actionnn, np.zeros(self.action_space.n))
         # return np.maximum(ac - np.ones(4), np.zeros(4))
-        if len(np.where(ac == 1)[0]) > 1:
+        if len(np.where(ac == 1)[0]) > 0:
             return 1
         else:
             return 0

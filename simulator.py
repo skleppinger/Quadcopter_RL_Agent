@@ -84,6 +84,27 @@ def plotStuff(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z, 
     ax7.plot(times, df['z'], '.', label='z')
     ax7.set_title('Z'+ title)
 
+    F1 = []
+    F2 = []
+    F3 = []
+    F4 = []
+
+    for i,n in enumerate(u1):
+        a, b, c, d = droneSim().processControlInputs(np.array([u1[i],u2[i],u3[i],u4[i]]))
+        F1.append(a)
+        F2.append(b)
+        F3.append(c)
+        F4.append(d)
+
+    fig7 = plt.figure()
+    ax8 = fig7.add_subplot(111, sharex = ax1)
+    ax8.plot(times, F1, '.', label='F1')
+    ax8.plot(times, F2, '.', label='F1')
+    ax8.plot(times, F3, '.', label='F1')
+    ax8.plot(times, F4, '.', label='F1')
+    ax8.legend()
+    ax8.set_title('PWM Signals'+ title)
+
     plt.show()
 
     return df
@@ -116,6 +137,10 @@ class droneSim():
 
         self.rollSetPrev = 0
         self.pitchSetPrev = 0
+
+        self.rateLimitUp = 4
+        self.rateLimitDown = 4
+        self.prevU = np.zeros(4)
 
 
     def stateMatrixInit(self):
@@ -213,9 +238,9 @@ class droneSim():
         xdot[0] = (1/m) * (g*sthe)
         xdot[1] = g * sphi / m
         xdot[2] = (1 / m) * (-Fz) + (g * cphi * cthe)
-        xdot[3] = 1 / Ixx * (L + (Iyy - Izz) * q * r)  # = pdot
-        xdot[4] = 1 / Iyy * (M + (Izz - Ixx) * p * r)  # = qdot
-        xdot[5] = 1 / Izz * (N + (Ixx - Iyy) * p * q)  # = rdot
+        xdot[3] = (1 / Ixx * (L + (Iyy - Izz) * q * r)) - .05 * p**2 # = pdot
+        xdot[4] = (1 / Iyy * (M + (Izz - Ixx) * p * r)) - .05 * q**2  # = qdot
+        xdot[5] = (1 / Izz * (N + (Ixx - Iyy) * p * q)) - .05 * r**2  # = rdot
         xdot[6] = p + (q * sphi + r * cphi) * sthe / cthe  # = phidot
         xdot[7] = q * cphi - r * sphi  # = thetadot
         xdot[8] = (q * sphi + r * cphi) / cthe  # = psidot
@@ -348,6 +373,21 @@ class droneSim():
         yawError= setpoints[3] - x[5]
 
         return altError, rollError, pitchError, yawError
+
+    def checkActionStepSize(self, action):
+        #limit step-to-step action size (imitating motor inertia)
+        limitedActions = np.zeros(4)
+        for i,n in enumerate(action):
+            diff = n - self.prevU[i]
+            if diff > self.rateLimitUp:
+                limitedActions[i] = self.prevU[i] + self.rateLimitUp
+            elif diff < -self.rateLimitDown:
+                limitedActions[i] = self.prevU[i] - self.rateLimitDown
+            else:
+                limitedActions[i] = n
+
+        self.prevU = limitedActions
+        return limitedActions
 
     def globalNeededThrust(self,x, u_x, u_y):
         #from https://liu.diva-portal.org/smash/get/diva2:1129641/FULLTEXT01.pdf, page 48
