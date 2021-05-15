@@ -338,8 +338,8 @@ class droneGym(gym.Env):
         # goodDist = 3 #in m
 
         self.angular_rate_sp = np.zeros(3)
-        # self.true_error = self.angular_rate_sp - np.array([state[3], state[4], state[5]])
-        self.true_error = self.angular_rate_sp - np.array([state[6], state[7], state[8]])
+        self.true_error = self.angular_rate_sp - np.array([state[3], state[4], state[5]])
+        # self.true_error = self.angular_rate_sp - np.array([state[6], state[7], state[8]])
         shaping = -np.sum(self.true_error**2)
 
         e_penalty = 0
@@ -478,8 +478,8 @@ class droneGym(gym.Env):
         # x[2] = -.049
         x[11] = 8#.049
         x[12] = 0#9.951
-        x[3] = np.random.random()*.9457718
-        x[4] = np.random.random()*.9457718
+        x[3] = (np.random.random()-.5)*1.8915436
+        x[4] = (np.random.random()-.5)*1.8915436
         # x[5] = np.random.random()*.3457718
         # x0 = xdot_b = latitudinal velocity body frame
         # x1 = ydot_b = latitudinal velocity body frame

@@ -26,10 +26,10 @@ powerEst = []
 
 bsRateLimiter = 0
 
-u1 = []
-u2 = []
-u3 = []
-u4 = []
+u1 = np.array([])
+u2 = np.array([])
+u3 = np.array([])
+u4 = np.array([])
 
 
 def plotStuff(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z, u1, u2, u3, u4, title = None):
@@ -145,11 +145,14 @@ class droneSim():
 
     def stateMatrixInit(self):
         x = np.zeros(12)
-        x[11] = 8#.049
+        x[11] = 1000#.049
         # x[12] = 0#9.951
-        x[2] = np.random.random()*.6457718
-        x[3] = np.random.random()*.6457718
-        x[4] = np.random.random()*.6457718
+        # x[2] = np.random.random()*.6457718
+        # x[3] = np.random.random()*.6457718
+        # x[4] = np.random.random()*.6457718
+
+        # x[3] = np.pi/2
+        # x[7] = np.pi/2
         # x0 = xdot_b = latitudinal velocity body frame = u
         # x1 = ydot_b = latitudinal velocity body frame = v
         # x2 = zdot_b = latitudinal velocity body frame = w
@@ -232,15 +235,20 @@ class droneSim():
         spsi = np.sin(psi)
 
         # Calculate the derivative of the state matrix using EOM
-        # xdot[0] = -g * sthe + r * vb - q * wb  # = udot
-        # xdot[1] = g * sphi * cthe - r * ub + p * wb  # = vdot
-        # xdot[2] = 1 / m * (-Fz) + g * cphi * cthe + q * ub - p * vb  # = wdot
-        xdot[0] = (1/m) * (g*sthe)
-        xdot[1] = g * sphi / m
-        xdot[2] = (1 / m) * (-Fz) + (g * cphi * cthe)
-        xdot[3] = (1 / Ixx * (L + (Iyy - Izz) * q * r)) - .05 * p**2 # = pdot
-        xdot[4] = (1 / Iyy * (M + (Izz - Ixx) * p * r)) - .05 * q**2  # = qdot
-        xdot[5] = (1 / Izz * (N + (Ixx - Iyy) * p * q)) - .05 * r**2  # = rdot
+        xdot[0] = -g * sthe + r * vb - q * wb     # = udot
+        xdot[1] = g * sphi * cthe - r * ub + p * wb    # = vdot
+        xdot[2] = 1 / m * (-Fz) + g * cphi * cthe + q * ub - p * vb    # = wdot
+        xdot[3] = (1 / Ixx * (L + (Iyy - Izz) * q * r)) # = pdot
+        xdot[4] = (1 / Iyy * (M + (Izz - Ixx) * p * r))   # = qdot
+        xdot[5] = (1 / Izz * (N + (Ixx - Iyy) * p * q))  # = rdot
+
+        # xdot[0] = self.applyWindResistance(-g * sthe + r * vb - q * wb, .05, -g * sthe + r * vb - q * wb)   # = udot
+        # xdot[1] = self.applyWindResistance(g * sphi * cthe - r * ub + p * wb, .05, g * sphi * cthe - r * ub + p * wb)  # = vdot
+        # xdot[2] = self.applyWindResistance(1 / m * (-Fz) + g * cphi * cthe + q * ub - p * vb, .05, 1 / m * (-Fz) + g * cphi * cthe + q * ub - p * vb)    # = wdot
+        # xdot[3] = self.applyWindResistance(1 / Ixx * (L + (Iyy - Izz) * q * r), .05, p)  # = pdot
+        # xdot[4] = self.applyWindResistance(1 / Iyy * (M + (Izz - Ixx) * p * r), .05, q)  # = qdot
+        # xdot[5] = self.applyWindResistance(1 / Izz * (N + (Ixx - Iyy) * p * q), .05, r)  # = rdot
+
         xdot[6] = p + (q * sphi + r * cphi) * sthe / cthe  # = phidot
         xdot[7] = q * cphi - r * sphi  # = thetadot
         xdot[8] = (q * sphi + r * cphi) / cthe  # = psidot
@@ -256,6 +264,14 @@ class droneSim():
         xdot[11] = -1 * (-sthe * ub + sphi * cthe * vb + cphi * cthe * wb)  # = zEdot
 
         return xdot
+
+    def applyWindResistance(self, value, wind_resistance_factor, dirValue):
+
+        sign = np.sign(value)
+        if sign == 0:
+            sign = 1
+
+        return sign * (np.abs(value) - wind_resistance_factor*dirValue**2)
 
     def stateTransition2(self,x,u):
         xdot = np.zeros(12)
@@ -537,25 +553,26 @@ if __name__ == "__main__":
     # x[4] = .2
     # x[5] = .8
 
-    while t < 10:
+    while t < 100:
         times.append(t)
         t += dt
         # x = ds.randomWind(x)
 
-        errs = ds.calculateError(x, ds.controlInputs(x,t))
-
-        x_next, currU = ds.numericalIntegration(x, errs, dt)
+        # errs = ds.calculateError(x, ds.controlInputs(x,t))
+        errs = np.array([0,0,0,0])
+        x_next, currU = ds.numericalIntegration(x, errs, dt, errsIsControl = True)
         a1, a2, a3, a4 = ds.processControlInputs(currU)
 
-        u1.append(currU[0])
-        u2.append(currU[1])
-        u3.append(currU[2])
-        u4.append(currU[3])
+        # u1.append(currU[0])
+        # u2.append(currU[1])
+        # u3.append(currU[2])
+        # u4.append(currU[3])
 
-        # u1.append(a1)
-        # u2.append(a2)
-        # u3.append(a3)
-        # u4.append(a4)
+        u1 = np.append(u1,currU[0])
+        u2 = np.append(u2,currU[1])
+        u3 = np.append(u3,currU[2])
+        u4 = np.append(u4,currU[3])
+
 
         # Check for ground collision
         if x_next[11] < .05:
@@ -573,21 +590,21 @@ if __name__ == "__main__":
         # if t > 5:
         #     print('tt')
 
-    df = plotStuff(times, ds.xdot_b, ds.ydot_b, ds.zdot_b, ds.p, ds.q, ds.r, ds.phi, ds.theta,ds.psi, ds.x, ds.y, ds.z, u1, u2, u3, u4, title = 't')
+    df = plotStuff(times, ds.xdot_b, ds.ydot_b, ds.zdot_b, ds.p, ds.q, ds.r, ds.phi, ds.theta,ds.psi, ds.x, ds.y, ds.z, u1, u2, u3, u4, title = ' t')
 
 
 
-    with open(r'C:\Users\Stephen\PycharmProjects\QuadcopterSim\visualizer\test.js', 'w') as outfile:
-        outfile.truncate(0)
-        outfile.write("var sim_data = [ \n")
-        json.dump([i for i in times], outfile, indent=4)
-        outfile.write(",\n")
-        json.dump([], outfile, indent=4)
-        outfile.write(",\n")
-        parsed = json.loads(
-            df[['xdot_b', 'ydot_b', 'zdot_b', 'p', 'q', 'r', 'phi', 'theta', 'psi', 'x', 'y', 'z']].T.to_json(
-                orient='values'))
-        json.dump(parsed, outfile, indent=4)
-        outfile.write("]")
+    # with open(r'C:\Users\Stephen\PycharmProjects\QuadcopterSim\visualizer\test.js', 'w') as outfile:
+    #     outfile.truncate(0)
+    #     outfile.write("var sim_data = [ \n")
+    #     json.dump([i for i in times], outfile, indent=4)
+    #     outfile.write(",\n")
+    #     json.dump([], outfile, indent=4)
+    #     outfile.write(",\n")
+    #     parsed = json.loads(
+    #         df[['xdot_b', 'ydot_b', 'zdot_b', 'p', 'q', 'r', 'phi', 'theta', 'psi', 'x', 'y', 'z']].T.to_json(
+    #             orient='values'))
+    #     json.dump(parsed, outfile, indent=4)
+    #     outfile.write("]")
 
     print('tt')
