@@ -232,15 +232,15 @@ class droneSim():
         spsi = np.sin(psi)
 
         # Calculate the derivative of the state matrix using EOM
-        # xdot[0] = -g * sthe + r * vb - q * wb  # = udot
-        # xdot[1] = g * sphi * cthe - r * ub + p * wb  # = vdot
-        # xdot[2] = 1 / m * (-Fz) + g * cphi * cthe + q * ub - p * vb  # = wdot
-        xdot[0] = (1/m) * (g*sthe)
-        xdot[1] = g * sphi / m
-        xdot[2] = (1 / m) * (-Fz) + (g * cphi * cthe)
-        xdot[3] = (1 / Ixx * (L + (Iyy - Izz) * q * r)) - .05 * p**2 # = pdot
-        xdot[4] = (1 / Iyy * (M + (Izz - Ixx) * p * r)) - .05 * q**2  # = qdot
-        xdot[5] = (1 / Izz * (N + (Ixx - Iyy) * p * q)) - .05 * r**2  # = rdot
+        xdot[0] = -g * sthe + r * vb - q * wb  # = udot
+        xdot[1] = g * sphi * cthe - r * ub + p * wb  # = vdot
+        xdot[2] = 1 / m * (-Fz) + g * cphi * cthe + q * ub - p * vb  # = wdot
+        # xdot[0] = (1/m) * (g*sthe)
+        # xdot[1] = g * sphi / m
+        # xdot[2] = (1 / m) * (-Fz) + (g * cphi * cthe)
+        xdot[3] = (1 / Ixx * (L + (Iyy - Izz) * q * r)) - .05 * p**2 * np.sign(p) # = pdot
+        xdot[4] = (1 / Iyy * (M + (Izz - Ixx) * p * r)) - .05 * q**2 * np.sign(q) # = qdot
+        xdot[5] = (1 / Izz * (N + (Ixx - Iyy) * p * q)) - .05 * r**2 * np.sign(r) # = rdot
         xdot[6] = p + (q * sphi + r * cphi) * sthe / cthe  # = phidot
         xdot[7] = q * cphi - r * sphi  # = thetadot
         xdot[8] = (q * sphi + r * cphi) / cthe  # = psidot

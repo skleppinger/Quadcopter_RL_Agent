@@ -150,6 +150,10 @@ class droneGym(gym.Env):
         self.actionnn = action
         action = action * 100
         action[1:] = action[1:] - 50
+
+        # action[0] = action[0]*1.5
+        # if action[0]>100: action[0] = 100
+
         temp = action
 
         action = self.checkActionStepSize(action)
@@ -359,7 +363,7 @@ class droneGym(gym.Env):
             min_y_reward = max_min_y_reward * (1 - np.average(self.actionnn)) * inband
 
         if roll_bad or pitch_bad:
-            angleThreshPunishment = -100
+            angleThreshPunishment = -100000
         else:
             angleThreshPunishment = 0
 
@@ -478,8 +482,8 @@ class droneGym(gym.Env):
         # x[2] = -.049
         x[11] = 8#.049
         x[12] = 0#9.951
-        x[3] = np.random.random()*.9457718
-        x[4] = np.random.random()*.9457718
+        x[3] = (np.random.random()-.5)*1.8915436
+        x[4] = (np.random.random()-.5)*1.8915436
         # x[5] = np.random.random()*.3457718
         # x0 = xdot_b = latitudinal velocity body frame
         # x1 = ydot_b = latitudinal velocity body frame

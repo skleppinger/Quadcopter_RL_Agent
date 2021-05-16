@@ -76,7 +76,7 @@ env = gym.make('droneGym-v0')
 
 model = PPO2(MlpPolicy, env, verbose = 0,n_steps = 3000, nminibatches=1,tensorboard_log="./drone_tensorboard/")
 # model = PPO2(CustomPolicy, env, verbose = 0, n_steps = 3000, nminibatches=1,tensorboard_log="./drone_tensorboard/")
-model = model.load('PPO2_ThreeAction.zip')
+model = model.load('PPO2_ThreeActionPQR.zip')
 model.full_tensorboard_log = True
 model.tensorboard_log = "./drone_tensorboard/"
 model.learning_rate = lrGenerator
