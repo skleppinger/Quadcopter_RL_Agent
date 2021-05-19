@@ -81,7 +81,7 @@ model.full_tensorboard_log = True
 model.tensorboard_log = "./drone_tensorboard/"
 model.learning_rate = lrGenerator
 model.env = DummyVecEnv([lambda: env])
-model.learn(total_timesteps=1000000000)
+model.learn(total_timesteps=100000000)
 
 
 

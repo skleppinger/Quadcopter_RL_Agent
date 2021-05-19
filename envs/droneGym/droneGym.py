@@ -57,6 +57,7 @@ class droneGym(gym.Env):
 
         # self.observation_space = spaces.Box(low=np.array((-100,-100,-100,0,0,0,0,0,0,-100,-100,-100,-100,-100,-100)), high=np.array((100,100,100,7,7,7,7,7,7,100,100,100,100,100,100)))
         self.observation_space = spaces.Box(low=np.array((-np.inf,-np.inf,-np.inf,-np.inf)), high=np.array((np.inf,np.inf,np.inf,np.inf)))
+        # self.observation_space = spaces.Box(low=np.array((-np.inf,-np.inf,-np.inf,-np.inf,-np.inf,-np.inf,-np.inf)), high=np.array((np.inf,np.inf,np.inf,np.inf,np.inf,np.inf,np.inf)))
 
         self.rateLimitUp = 4
         self.rateLimitDown = 4#8
@@ -167,10 +168,12 @@ class droneGym(gym.Env):
 
         # x_next = self.numericalIntegration(self.x,action,self.dt)
         self.ds.x = self.x[0:12]
-        tempX, currU = self.ds.numericalIntegration(self.x[0:12], action, self.dt, errsIsControl=True)
+        tempX, currU, xdot = self.ds.numericalIntegration(self.x[0:12], action, self.dt, errsIsControl=True)
         x_next = np.zeros(16)
         x_next[0:12] = tempX
         self.t += self.dt
+
+        self.globalAngularVel = xdot[[6,7,8]]
 
         if x_next[11] < .05:
             x_next[2] = np.min([self.x[2],x_next[2],0])
@@ -194,7 +197,7 @@ class droneGym(gym.Env):
         self.x = x_next
         self.memory(self.x, temp)
 
-        return self.add_noise(self.x[[12,13,14,15]]), reward, done, {}
+        return self.add_noise(self.x[[12,13,14,15,6,7,8]]), reward, done, {}
 
     def add_noise(self, x):
 
@@ -334,16 +337,16 @@ class droneGym(gym.Env):
         maxAngleAllowed = 0.5745329
         # pitch_bad = not(-maxAngleAllowed < state[6] < maxAngleAllowed) and self.t > .4
         # roll_bad = not(-maxAngleAllowed < state[7] < maxAngleAllowed) and self.t > .4
-        roll_bad = ((2*np.pi)-maxAngleAllowed) > state[6] > maxAngleAllowed and self.t > .4
-        pitch_bad = ((2*np.pi)-maxAngleAllowed) > state[7] > maxAngleAllowed and self.t > .4
+        roll_bad = ((2*np.pi)-maxAngleAllowed) > np.abs(state[6]) > maxAngleAllowed
+        pitch_bad = ((2*np.pi)-maxAngleAllowed) > np.abs(state[7]) > maxAngleAllowed
         alt_bad = not(.1 < state[11] < 100) and self.t > 1
         #
         # self.rewardList.append(reward)
         # goodDist = 3 #in m
 
         self.angular_rate_sp = np.zeros(3)
-        # self.true_error = self.angular_rate_sp - np.array([state[3], state[4], state[5]])
-        self.true_error = self.angular_rate_sp - np.array([state[6], state[7], state[8]])
+        self.true_error = self.angular_rate_sp - np.array([state[3], state[4], state[5]])
+        self.true_error += self.angular_rate_sp - self.globalAngularVel
         shaping = -np.sum(self.true_error**2)
 
         e_penalty = 0
@@ -363,7 +366,7 @@ class droneGym(gym.Env):
             min_y_reward = max_min_y_reward * (1 - np.average(self.actionnn)) * inband
 
         if roll_bad or pitch_bad:
-            angleThreshPunishment = -100000
+            angleThreshPunishment = -1000000000
         else:
             angleThreshPunishment = 0
 
@@ -372,7 +375,7 @@ class droneGym(gym.Env):
             min_y_reward,
             angleThreshPunishment,
             10000000*e_penalty,
-            -1e9 * np.sum(self.oversaturation_high()),
+            -1e6 * np.sum(self.oversaturation_high()),
             self.doing_nothing_penalty(),
             self.on_the_ground_penalty(state),
             self.repeatedActionsPenalty(self.actionActual, self.prev_action)
@@ -413,9 +416,9 @@ class droneGym(gym.Env):
 
         self.prev_action = self.actionActual
 
-        return reward/10000000, done
+        return reward/100000000, done
 
-    def repeatedActionsPenalty(self,action, prevAction, penalty=1e5):
+    def repeatedActionsPenalty(self,action, prevAction, penalty=1e4):
         numInfring = 0
         for i, n in enumerate(action):
             if n == prevAction[i]:
@@ -423,7 +426,7 @@ class droneGym(gym.Env):
 
         return numInfring*penalty
 
-    def on_the_ground_penalty(self, state, penalty = 1e4):
+    def on_the_ground_penalty(self, state, penalty = 1e7):
         total_penalty = 0
 
         if state[11] < .06 and self.t > .15:
@@ -431,7 +434,7 @@ class droneGym(gym.Env):
 
         return total_penalty
 
-    def doing_nothing_penalty(self, penalty=1e6):
+    def doing_nothing_penalty(self, penalty=1e7):
         total_penalty = 0
 
         if np.sum(self.actionnn == 0) > 1:# and not (self.angular_rate_sp == np.zeros(3)).all():

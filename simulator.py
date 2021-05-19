@@ -20,7 +20,9 @@ dy = dx
 dragCoef = 4.406*10**-7 #kg*m^2*s^-1
 g = 9.81  #m/s/s
 DTR = 1/57.3; RTD = 57.3
-thrustCoef = 1.5108 * 10**-5 #kg*m
+# thrustCoef = 1.5108 * 10**-5 #kg*m
+thrustCoef = 2.5108 * 10**-5 #kg*m
+
 
 powerEst = []
 
@@ -353,7 +355,8 @@ class droneSim():
         # x_next = x + xdot * dt
         # x_next[6:] = x_next[6:] + .5 * globalAccelerations * dt**2
 
-        x_next = x + self.stateTransition(x, u) * dt
+        xdot = self.stateTransition(x, u)
+        x_next = x + xdot * dt
 
         # for i,n in enumerate(x_next):
         #     if i in [0,1,2,9,10,11]:
@@ -362,7 +365,7 @@ class droneSim():
         #         if np.abs(n)>2*np.pi:
         #             x_next[i] = n % (2*np.pi)
 
-        return x_next, u
+        return x_next, u, xdot
 
     def calculateError(self, x, setpoints):
         #store current errors?
