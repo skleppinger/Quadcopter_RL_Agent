@@ -56,8 +56,8 @@ class droneGym(gym.Env):
         self.x = self.stateMatrixInit()
 
         # self.observation_space = spaces.Box(low=np.array((-100,-100,-100,0,0,0,0,0,0,-100,-100,-100,-100,-100,-100)), high=np.array((100,100,100,7,7,7,7,7,7,100,100,100,100,100,100)))
-        self.observation_space = spaces.Box(low=np.array((-np.inf,-np.inf,-np.inf,-np.inf)), high=np.array((np.inf,np.inf,np.inf,np.inf)))
-        # self.observation_space = spaces.Box(low=np.array((-np.inf,-np.inf,-np.inf,-np.inf,-np.inf,-np.inf,-np.inf)), high=np.array((np.inf,np.inf,np.inf,np.inf,np.inf,np.inf,np.inf)))
+        # self.observation_space = spaces.Box(low=np.array((-np.inf,-np.inf,-np.inf,-np.inf)), high=np.array((np.inf,np.inf,np.inf,np.inf)))
+        self.observation_space = spaces.Box(low=np.array((-np.inf,-np.inf,-np.inf,-np.inf,-np.inf,-np.inf,-np.inf)), high=np.array((np.inf,np.inf,np.inf,np.inf,np.inf,np.inf,np.inf)))
 
         self.rateLimitUp = 4
         self.rateLimitDown = 4#8
