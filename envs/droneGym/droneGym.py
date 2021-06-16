@@ -197,7 +197,7 @@ class droneGym(gym.Env):
         self.x = x_next
         self.memory(self.x, temp)
 
-        return self.add_noise(self.x[[12,13,14,15,6,7,8]]), reward, done, {}
+        return self.add_noise(self.x[[12,13,14,15,0,1,2]]), reward, done, {}
 
     def add_noise(self, x):
 
@@ -252,7 +252,7 @@ class droneGym(gym.Env):
         # self.angular_rate_sp = [np.random.random()*.6457718, np.random.random()*.6457718, np.random.random()*.6457718]
         self.angular_rate_sp = [0,0,0]#
 
-        return self.x[[12,13,14,11]]
+        return self.x[[12,13,14,11,0,1,2]]
 
     def render(self, mode='human', close=False, epNum = 0):
         # Render the environment to the screen
@@ -347,6 +347,7 @@ class droneGym(gym.Env):
         self.angular_rate_sp = np.zeros(3)
         self.true_error = self.angular_rate_sp - np.array([state[3], state[4], state[5]])
         self.true_error += self.angular_rate_sp - self.globalAngularVel
+        self.true_error = self.angular_rate_sp - np.array([state[0], state[1], state[2]])
         shaping = -np.sum(self.true_error**2)
 
         e_penalty = 0
@@ -371,14 +372,15 @@ class droneGym(gym.Env):
             angleThreshPunishment = 0
 
         rewards = [
-            -100 * np.max(np.abs(self.actionActual - self.prev_action)),
-            min_y_reward,
-            angleThreshPunishment,
+            -1000000 * np.max(np.abs(self.actionnn - self.prev_action)),
+            # min_y_reward,
+            # angleThreshPunishment,
             10000000*e_penalty,
             -1e6 * np.sum(self.oversaturation_high()),
             self.doing_nothing_penalty(),
-            self.on_the_ground_penalty(state),
-            self.repeatedActionsPenalty(self.actionActual, self.prev_action)
+            # self.on_the_ground_penalty(state),
+            self.repeatedActionsPenalty(self.actionActual, self.prev_action),
+            166666
         ]
 
         reward = np.sum(rewards)
@@ -414,11 +416,11 @@ class droneGym(gym.Env):
                 writer.writerow([round(time.time()-self.startTime,1), round(self.t,2), failer, round(totReward/self.t,3),
                                  round(state[11],3),round(state[6],3),round(state[7],3),round(state[8],3), np.ceil(state[12]), np.ceil(state[13])])
 
-        self.prev_action = self.actionActual
+        self.prev_action = self.actionnn
 
         return reward/100000000, done
 
-    def repeatedActionsPenalty(self,action, prevAction, penalty=1e4):
+    def repeatedActionsPenalty(self,action, prevAction, penalty=1e5):
         numInfring = 0
         for i, n in enumerate(action):
             if n == prevAction[i]:
@@ -426,7 +428,7 @@ class droneGym(gym.Env):
 
         return numInfring*penalty
 
-    def on_the_ground_penalty(self, state, penalty = 1e7):
+    def on_the_ground_penalty(self, state, penalty = 1e5):
         total_penalty = 0
 
         if state[11] < .06 and self.t > .15:
@@ -434,7 +436,7 @@ class droneGym(gym.Env):
 
         return total_penalty
 
-    def doing_nothing_penalty(self, penalty=1e7):
+    def doing_nothing_penalty(self, penalty=1e6):
         total_penalty = 0
 
         if np.sum(self.actionnn == 0) > 1:# and not (self.angular_rate_sp == np.zeros(3)).all():
@@ -485,8 +487,8 @@ class droneGym(gym.Env):
         # x[2] = -.049
         x[11] = 8#.049
         x[12] = 0#9.951
-        x[3] = (np.random.random()-.5)*1.8915436
-        x[4] = (np.random.random()-.5)*1.8915436
+        x[3] = (np.random.random()-.5)*1.8915436*2
+        x[4] = (np.random.random()-.5)*1.8915436*2
         # x[5] = np.random.random()*.3457718
         # x0 = xdot_b = latitudinal velocity body frame
         # x1 = ydot_b = latitudinal velocity body frame
