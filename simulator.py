@@ -34,7 +34,7 @@ u3 = []
 u4 = []
 
 
-def plotStuff(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z, u1, u2, u3, u4, title = None):
+def plotStuff(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z, u1, u2, u3, u4, title = None, onlyOne = False):
     df = pd.DataFrame(list(zip(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z)),
                       columns=['t', 'xdot_b', 'ydot_b', 'zdot_b', 'p', 'q', 'r', 'phi', 'theta', 'psi', 'x', 'y', 'z'])
 
@@ -46,6 +46,9 @@ def plotStuff(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z, 
     ax1.plot(times, u4 - .02, '.', label='u4')
     ax1.legend()
     ax1.set_title('Control Signals' + title)
+
+    if onlyOne:
+        return None
 
     fig1 = plt.figure()
     ax2 = fig1.add_subplot(111, sharex = ax1)
