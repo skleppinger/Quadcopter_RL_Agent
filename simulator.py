@@ -150,11 +150,11 @@ class droneSim():
 
     def stateMatrixInit(self):
         x = np.zeros(12)
-        x[11] = 1000#.049
+        x[11] = 8#.049
         # x[12] = 0#9.951
+        x[2] = np.random.random()*.6457718
         x[3] = np.random.random()*.6457718
         x[4] = np.random.random()*.6457718
-        # x[5] = np.random.random()*.6457718
         # x0 = xdot_b = latitudinal velocity body frame = u
         # x1 = ydot_b = latitudinal velocity body frame = v
         # x2 = zdot_b = latitudinal velocity body frame = w
