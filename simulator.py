@@ -8,7 +8,7 @@ np.seterr(all='raise')
 
 
 # Physical Constants of http://www.diva-portal.org/smash/get/diva2:1020192/FULLTEXT02.pdf drone
-m = 1.07         #kg
+m = 1.477    #1.07         #kg
 Ixx = 0.0093   #kg-m^2
 Iyy = 0.0093   #kg-m^2
 # Izz = 0.9*(Ixx + Iyy) #kg-m^2 (Assume nearly flat object, z=0)
@@ -34,7 +34,7 @@ u3 = []
 u4 = []
 
 
-def plotStuff(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z, u1, u2, u3, u4, title = None):
+def plotStuff(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z, u1, u2, u3, u4, title = None, onlyOne=False):
     df = pd.DataFrame(list(zip(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z)),
                       columns=['t', 'xdot_b', 'ydot_b', 'zdot_b', 'p', 'q', 'r', 'phi', 'theta', 'psi', 'x', 'y', 'z'])
 
@@ -46,6 +46,9 @@ def plotStuff(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z, 
     ax1.plot(times, u4 - .02, '.', label='u4')
     ax1.legend()
     ax1.set_title('Control Signals' + title)
+
+    if onlyOne:
+        return None
 
     fig1 = plt.figure()
     ax2 = fig1.add_subplot(111, sharex = ax1)
@@ -147,11 +150,11 @@ class droneSim():
 
     def stateMatrixInit(self):
         x = np.zeros(12)
-        x[11] = 8#.049
+        x[11] = 1000#.049
         # x[12] = 0#9.951
-        x[2] = np.random.random()*.6457718
         x[3] = np.random.random()*.6457718
         x[4] = np.random.random()*.6457718
+        # x[5] = np.random.random()*.6457718
         # x0 = xdot_b = latitudinal velocity body frame = u
         # x1 = ydot_b = latitudinal velocity body frame = v
         # x2 = zdot_b = latitudinal velocity body frame = w
@@ -175,7 +178,13 @@ class droneSim():
         modifyDef = 100000   #initial Val = 10000000
         lesDef = .013385701848569465 * modifyDef
 
-        for i,n in enumerate(u):
+        F1 = u[0] + u[2] + u[3]/2
+        F2 = u[0] - u[1] - u[3]/2
+        F3 = u[0] - u[2] + u[3]/2
+        F4 = u[0] + u[1] - u[3]/2
+        propVolt = [F1, F2, F3, F4]
+
+        for i,n in enumerate(propVolt):
             # thrustForce[i] = .447675* n / 10
 
             try:
@@ -184,14 +193,14 @@ class droneSim():
                 w_o[i] = modifyDef
             thrustForce[i] = thrustCoef * w_o[i]
 
-        F1 = thrustForce[0] + thrustForce[2] + thrustForce[3]/2
-        F2 = thrustForce[0] - thrustForce[1] - thrustForce[3]/2
-        F3 = thrustForce[0] - thrustForce[2] + thrustForce[3]/2
-        F4 = thrustForce[0] + thrustForce[1] - thrustForce[3]/2
+        # F1 = thrustForce[0] + thrustForce[2] + thrustForce[3]/2
+        # F2 = thrustForce[0] - thrustForce[1] - thrustForce[3]/2
+        # F3 = thrustForce[0] - thrustForce[2] + thrustForce[3]/2
+        # F4 = thrustForce[0] + thrustForce[1] - thrustForce[3]/2
 
         powerEst.append(thrustForce[0])
 
-        return F1, F2, F3, F4
+        return thrustForce
 
     def stateTransition(self, x, u):
         xdot = np.zeros(12)
@@ -520,8 +529,8 @@ if __name__ == "__main__":
     plt.ion()
     # altController = PIDcontrol.PIDControl('Alt', Kp=50, Ki=6, Kd=28, timeStep=dt, open=False)
     altControl = PIDcontrol.PIDControl('Alt', Kp =11, Ki = 1.1, Kd = 5, timeStep = dt, open = False)
-    rollControl = PIDcontrol.PIDControl('Roll', Kp = 8, Ki = 6, Kd = 8, timeStep = dt, open = True)
-    pitchControl = PIDcontrol.PIDControl('Pitch', Kp = 8, Ki = 6, Kd = 8, timeStep = dt, open = True)
+    rollControl = PIDcontrol.PIDControl('Roll', Kp = 30, Ki = 0, Kd = 0, timeStep = dt, open = False)
+    pitchControl = PIDcontrol.PIDControl('Pitch', Kp = 30, Ki = 0, Kd = 0, timeStep = dt, open = False)
     yawControl = PIDcontrol.PIDControl('Yaw', Kp = 600, Ki = 0, Kd = .1, timeStep = dt, open = True)
 
     xControl = PIDcontrol.PIDControl('X', Kp = .015, Ki = 0, Kd = 0, timeStep = dt, open = True)
@@ -545,7 +554,7 @@ if __name__ == "__main__":
 
         errs = ds.calculateError(x, ds.controlInputs(x,t))
 
-        x_next, currU = ds.numericalIntegration(x, errs, dt)
+        x_next, currU, xdot = ds.numericalIntegration(x, errs, dt)
         a1, a2, a3, a4 = ds.processControlInputs(currU)
 
         u1.append(currU[0])
@@ -574,9 +583,10 @@ if __name__ == "__main__":
         # if t > 5:
         #     print('tt')
 
-    df = plotStuff(times, ds.xdot_b, ds.ydot_b, ds.zdot_b, ds.p, ds.q, ds.r, ds.phi, ds.theta,ds.psi, ds.x, ds.y, ds.z, u1, u2, u3, u4, title = 't')
+    controlsDf = pd.DataFrame(np.array([u1, u2, u3, u4]).T, columns = ['u1','u2','u3','u4'])
 
-
+    df = plotStuff(times, ds.xdot_b, ds.ydot_b, ds.zdot_b, ds.p, ds.q, ds.r, ds.phi, ds.theta,ds.psi, ds.x, ds.y, ds.z,
+                   controlsDf['u1'], controlsDf['u2'], controlsDf['u3'], controlsDf['u4'], title = 't')
 
     with open(r'C:\Users\Stephen\PycharmProjects\QuadcopterSim\visualizer\test.js', 'w') as outfile:
         outfile.truncate(0)

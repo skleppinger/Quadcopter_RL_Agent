@@ -283,39 +283,39 @@ class droneGym(gym.Env):
 
 
 
-    def calcReward(self, state):
+    def calcReward(self, state, output_for_sim = False):
         #calculate reward based off of distance from setpoints
         done = False
 
         # if self.t < 5:
-        xSet = self.xSetRandom
-        ySet = self.ySetRandom
-        zSet = 10
-        # else:# self.t >= 5 and self.t<10:
-        #     xSet = -self.ySetRandom
-        #     ySet = -self.xSetRandom
-        #     zSet = 10
-        # elif self.t >= 10 and self.t < 15:
-        #     xSet = -5
-        #     ySet = 5
-        #     zSet = 12
-        # else:
-        # xSet = 0
-        # ySet = 0
+        # xSet = self.xSetRandom
+        # ySet = self.ySetRandom
         # zSet = 10
-
-        self.xSet = xSet
-        self.ySet = ySet
-        self.zSet = zSet
-
-        zErr, xErr, yErr = self.calculateError(state, [zSet, xSet, ySet])
-        # desiredZvel = -self.altControl.updateControl(zErr)
-        # desiredXvel = self.xControl.updateControl(xErr)
-        # desiredYvel = self.yControl.updateControl(yErr)
-        phiRef, thetaRef = self.globalNeededThrust(state, xErr, yErr)
-        # totRefs = [0, 0, 0, phiRef, thetaRef, 0]
-        # totRefs = [0, 0, 0, 0, 0, 0]
-        totRefs = [phiRef, thetaRef, 0]
+        # # else:# self.t >= 5 and self.t<10:
+        # #     xSet = -self.ySetRandom
+        # #     ySet = -self.xSetRandom
+        # #     zSet = 10
+        # # elif self.t >= 10 and self.t < 15:
+        # #     xSet = -5
+        # #     ySet = 5
+        # #     zSet = 12
+        # # else:
+        # # xSet = 0
+        # # ySet = 0
+        # # zSet = 10
+        #
+        # self.xSet = xSet
+        # self.ySet = ySet
+        # self.zSet = zSet
+        #
+        # zErr, xErr, yErr = self.calculateError(state, [zSet, xSet, ySet])
+        # # desiredZvel = -self.altControl.updateControl(zErr)
+        # # desiredXvel = self.xControl.updateControl(xErr)
+        # # desiredYvel = self.yControl.updateControl(yErr)
+        # phiRef, thetaRef = self.globalNeededThrust(state, xErr, yErr)
+        # # totRefs = [0, 0, 0, phiRef, thetaRef, 0]
+        # # totRefs = [0, 0, 0, 0, 0, 0]
+        # totRefs = [phiRef, thetaRef, 0]
 
 
         ###
@@ -346,13 +346,15 @@ class droneGym(gym.Env):
 
         self.angular_rate_sp = np.zeros(3)
         self.true_error = self.angular_rate_sp - np.array([state[3], state[4], state[5]])
-        self.true_error += self.angular_rate_sp - self.globalAngularVel
-        self.true_error = self.angular_rate_sp - np.array([state[0], state[1], state[2]])
+        # self.true_error += self.angular_rate_sp - self.globalAngularVel
+        # self.true_error = self.angular_rate_sp - np.array([state[0], state[1], state[2]])
         shaping = -np.sum(self.true_error**2)
 
         e_penalty = 0
         if self.prev_shaping is not None:
             e_penalty = shaping - self.prev_shaping
+            if e_penalty < 0:
+                e_penalty = e_penalty * 10
         self.prev_shaping = shaping
 
         min_y_reward = 0
@@ -367,21 +369,23 @@ class droneGym(gym.Env):
             min_y_reward = max_min_y_reward * (1 - np.average(self.actionnn)) * inband
 
         if roll_bad or pitch_bad:
-            angleThreshPunishment = -1000000000
+            angleThreshPunishment = -100000000000
         else:
             angleThreshPunishment = 0
 
         rewards = [
-            -1000000 * np.max(np.abs(self.actionnn - self.prev_action)),
+            -100000 * np.max(np.abs(self.actionnn - self.prev_action)),
             # min_y_reward,
-            # angleThreshPunishment,
-            10000000*e_penalty,
-            -1e6 * np.sum(self.oversaturation_high()),
-            self.doing_nothing_penalty(),
-            # self.on_the_ground_penalty(state),
-            self.repeatedActionsPenalty(self.actionActual, self.prev_action),
-            166666
+            angleThreshPunishment,
+            1000000000*e_penalty,
+            -1e7 * np.sum(self.oversaturation_high()),
+            self.doing_nothing_penalty(penalty = 1e8),
+            self.on_the_ground_penalty(state, penalty = 1e11),
+            -self.repeatedActionsPenalty(self.actionActual, self.prev_action, penalty = 1e13),
+            16666
         ]
+        if output_for_sim:
+            return rewards
 
         reward = np.sum(rewards)
         self.rewardList.append(reward)
@@ -418,7 +422,7 @@ class droneGym(gym.Env):
 
         self.prev_action = self.actionnn
 
-        return reward/100000000, done
+        return reward, done
 
     def repeatedActionsPenalty(self,action, prevAction, penalty=1e5):
         numInfring = 0
@@ -485,7 +489,7 @@ class droneGym(gym.Env):
     def stateMatrixInit(self):
         x = np.zeros(16)
         # x[2] = -.049
-        x[11] = 8#.049
+        x[11] = 1000#.049
         x[12] = 0#9.951
         x[3] = (np.random.random()-.5)*1.8915436*2
         x[4] = (np.random.random()-.5)*1.8915436*2
