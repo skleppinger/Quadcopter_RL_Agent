@@ -74,7 +74,7 @@ def lrGenerator(t):
 
 env = gym.make('droneGym-v0')
 
-model = PPO2(MlpPolicy, env, verbose = 0,n_steps = 3000, nminibatches=1,tensorboard_log="./drone_tensorboard/")
+model = PPO2(MlpPolicy, env, verbose = 0,n_steps = 3000, nminibatches=1,tensorboard_log="./drone_tensorboard/", gamma=.90)
 # model = PPO2(CustomPolicy, env, verbose = 0, n_steps = 3000, nminibatches=1,tensorboard_log="./drone_tensorboard/")
 model = model.load('Interim_fixedLeftTruns2.zip')
 model.full_tensorboard_log = True

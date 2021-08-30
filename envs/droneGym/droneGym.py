@@ -353,8 +353,8 @@ class droneGym(gym.Env):
         e_penalty = 0
         if self.prev_shaping is not None:
             e_penalty = shaping - self.prev_shaping
-            if e_penalty < 0:
-                e_penalty = e_penalty * 10
+            # if e_penalty < 0:
+            #     e_penalty = e_penalty * 15
         self.prev_shaping = shaping
 
         min_y_reward = 0
@@ -369,25 +369,25 @@ class droneGym(gym.Env):
             min_y_reward = max_min_y_reward * (1 - np.average(self.actionnn)) * inband
 
         if roll_bad or pitch_bad:
-            angleThreshPunishment = -100000000000
+            angleThreshPunishment = -30
         else:
-            angleThreshPunishment = 0
+            angleThreshPunishment = .2
 
         rewards = [
-            -100000 * np.max(np.abs(self.actionnn - self.prev_action)),
+            -.1 * np.max(np.abs(self.actionnn - self.prev_action)),
             # min_y_reward,
             angleThreshPunishment,
-            1000000000*e_penalty,
-            -1e7 * np.sum(self.oversaturation_high()),
-            self.doing_nothing_penalty(penalty = 1e8),
-            self.on_the_ground_penalty(state, penalty = 1e11),
-            -self.repeatedActionsPenalty(self.actionActual, self.prev_action, penalty = 1e13),
-            16666
+            .4*e_penalty,
+            -.1 * np.sum(self.oversaturation_high()),
+            self.doing_nothing_penalty(penalty = .1),
+            self.on_the_ground_penalty(state, penalty = .1),
+            -self.repeatedActionsPenalty(self.actionActual, self.prev_action, penalty = .2),
+            0
         ]
         if output_for_sim:
             return rewards
 
-        reward = np.sum(rewards)
+        reward = np.clip(np.sum(rewards), -1, 1)
         self.rewardList.append(reward)
 
 
