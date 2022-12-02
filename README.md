@@ -18,4 +18,4 @@ This starts off by default with a pre-trained model called aboutAsGood that's cu
 
 ##Visualization
 In order to visualize the flight of a single episode, you must insert calls to the env.render() function somewhere in the training (currently it's called once at the end of the training run).
-That generates a data file that can then be shown in browser by double clicking on the sim_vis.html file in the visualizier folder (the datafile will have to be renamed to test.json for now if you don't want to update the code)
+That generates a data file that can then be shown in browser by opening the sim_vis.html file in the visualizier folder (the datafile will have to be renamed to test.json for now if you don't want to update the code)
