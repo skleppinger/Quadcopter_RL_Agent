@@ -11,7 +11,7 @@ The framework used for this project closely adheres to the [OpenAI Gym](https://
 Due to this software versions are very specific - module versions are defined in the requirements.txt file and python needs to.  Running in a virtual environment is highly recommended.
 
 ## How to Run
-Once this repo is cloned and a virtual environment is set up per the requirements file, you can then generate a new model by running the main.py file.
+Once this repo is cloned, and a virtual environment is set up per the requirements file, you can then generate a new model by running the main.py file.
 You can visualize this training by opening up a tensorboard server pointing at the file being generated in the drone_tensorboard folder
 This starts off by default with a pre-trained model called aboutAsGood that's currently save in the repository - that model can be used as a suboptimal initial state.
 
