@@ -8,7 +8,7 @@ np.seterr(all='raise')
 
 
 # Physical Constants of http://www.diva-portal.org/smash/get/diva2:1020192/FULLTEXT02.pdf drone
-m = 1.07         #kg
+m = 1.477    #1.07         #kg
 Ixx = 0.0093   #kg-m^2
 Iyy = 0.0093   #kg-m^2
 # Izz = 0.9*(Ixx + Iyy) #kg-m^2 (Assume nearly flat object, z=0)
@@ -20,7 +20,9 @@ dy = dx
 dragCoef = 4.406*10**-7 #kg*m^2*s^-1
 g = 9.81  #m/s/s
 DTR = 1/57.3; RTD = 57.3
-thrustCoef = 1.5108 * 10**-5 #kg*m
+# thrustCoef = 1.5108 * 10**-5 #kg*m
+thrustCoef = 2.5108 * 10**-5 #kg*m
+
 
 powerEst = []
 
@@ -32,7 +34,7 @@ u3 = []
 u4 = []
 
 
-def plotStuff(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z, u1, u2, u3, u4, title = None):
+def plotStuff(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z, u1, u2, u3, u4, title = None, onlyOne=False):
     df = pd.DataFrame(list(zip(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z)),
                       columns=['t', 'xdot_b', 'ydot_b', 'zdot_b', 'p', 'q', 'r', 'phi', 'theta', 'psi', 'x', 'y', 'z'])
 
@@ -44,6 +46,9 @@ def plotStuff(times, xdot_b, ydot_b, zdot_b, p, q, r, phi, theta, psi, x, y, z, 
     ax1.plot(times, u4 - .02, '.', label='u4')
     ax1.legend()
     ax1.set_title('Control Signals' + title)
+
+    if onlyOne:
+        return None
 
     fig1 = plt.figure()
     ax2 = fig1.add_subplot(111, sharex = ax1)
@@ -142,6 +147,13 @@ class droneSim():
         self.rateLimitDown = 4
         self.prevU = np.zeros(4)
 
+        self.angular_rate_sp = [0,0,0]#
+        self.setpointFreq = np.zeros(3)
+        self.setpointAmp = np.zeros(3)
+        self.pSetpoints = [0]
+        self.qSetpoints = [0]
+        self.t_o = 0
+
 
     def stateMatrixInit(self):
         x = np.zeros(12)
@@ -173,7 +185,13 @@ class droneSim():
         modifyDef = 100000   #initial Val = 10000000
         lesDef = .013385701848569465 * modifyDef
 
-        for i,n in enumerate(u):
+        F1 = u[0] + u[2] + u[3]/2
+        F2 = u[0] - u[1] - u[3]/2
+        F3 = u[0] - u[2] + u[3]/2
+        F4 = u[0] + u[1] - u[3]/2
+        propVolt = [F1, F2, F3, F4]
+
+        for i,n in enumerate(propVolt):
             # thrustForce[i] = .447675* n / 10
 
             try:
@@ -182,14 +200,14 @@ class droneSim():
                 w_o[i] = modifyDef
             thrustForce[i] = thrustCoef * w_o[i]
 
-        F1 = thrustForce[0] + thrustForce[2] + thrustForce[3]/2
-        F2 = thrustForce[0] - thrustForce[1] - thrustForce[3]/2
-        F3 = thrustForce[0] - thrustForce[2] + thrustForce[3]/2
-        F4 = thrustForce[0] + thrustForce[1] - thrustForce[3]/2
+        # F1 = thrustForce[0] + thrustForce[2] + thrustForce[3]/2
+        # F2 = thrustForce[0] - thrustForce[1] - thrustForce[3]/2
+        # F3 = thrustForce[0] - thrustForce[2] + thrustForce[3]/2
+        # F4 = thrustForce[0] + thrustForce[1] - thrustForce[3]/2
 
         powerEst.append(thrustForce[0])
 
-        return F1, F2, F3, F4
+        return thrustForce
 
     def stateTransition(self, x, u):
         xdot = np.zeros(12)
@@ -232,15 +250,13 @@ class droneSim():
         spsi = np.sin(psi)
 
         # Calculate the derivative of the state matrix using EOM
-        # xdot[0] = -g * sthe + r * vb - q * wb  # = udot
-        # xdot[1] = g * sphi * cthe - r * ub + p * wb  # = vdot
-        # xdot[2] = 1 / m * (-Fz) + g * cphi * cthe + q * ub - p * vb  # = wdot
-        xdot[0] = (1/m) * (g*sthe)
-        xdot[1] = g * sphi / m
-        xdot[2] = (1 / m) * (-Fz) + (g * cphi * cthe)
-        xdot[3] = (1 / Ixx * (L + (Iyy - Izz) * q * r)) - .05 * p**2 # = pdot
-        xdot[4] = (1 / Iyy * (M + (Izz - Ixx) * p * r)) - .05 * q**2  # = qdot
-        xdot[5] = (1 / Izz * (N + (Ixx - Iyy) * p * q)) - .05 * r**2  # = rdot
+        xdot[0] = (-g * sthe + r * vb - q * wb)  - .05 * ub**2 * np.sign(ub)# = udot
+        xdot[1] = (g * sphi * cthe - r * ub + p * wb)  - .05 * vb**2 * np.sign(vb) # = vdot
+        xdot[2] = (1 / m * (-Fz) + g * cphi * cthe + q * ub - p * vb)  - .05 * wb**2 * np.sign(wb) # = wdot
+
+        xdot[3] = (1 / Ixx * (L + (Iyy - Izz) * q * r)) - .05 * p**2 * np.sign(p) # = pdot
+        xdot[4] = (1 / Iyy * (M + (Izz - Ixx) * p * r)) - .05 * q**2 * np.sign(q) # = qdot
+        xdot[5] = (1 / Izz * (N + (Ixx - Iyy) * p * q)) - .05 * r**2 * np.sign(r) # = rdot
         xdot[6] = p + (q * sphi + r * cphi) * sthe / cthe  # = phidot
         xdot[7] = q * cphi - r * sphi  # = thetadot
         xdot[8] = (q * sphi + r * cphi) / cthe  # = psidot
@@ -353,7 +369,8 @@ class droneSim():
         # x_next = x + xdot * dt
         # x_next[6:] = x_next[6:] + .5 * globalAccelerations * dt**2
 
-        x_next = x + self.stateTransition(x, u) * dt
+        xdot = self.stateTransition(x, u)
+        x_next = x + xdot * dt
 
         # for i,n in enumerate(x_next):
         #     if i in [0,1,2,9,10,11]:
@@ -362,7 +379,7 @@ class droneSim():
         #         if np.abs(n)>2*np.pi:
         #             x_next[i] = n % (2*np.pi)
 
-        return x_next, u
+        return x_next, u, xdot
 
     def calculateError(self, x, setpoints):
         #store current errors?
@@ -466,7 +483,7 @@ class droneSim():
 
 
         # if t < 7:
-        altSetpoint = 10
+        altSetpoint = 1000
         # elif 7<=t<12:
         #     altSetpoint = 2
         # else:
@@ -511,6 +528,116 @@ class droneSim():
         self.y.append(x[10])
         self.z.append(x[11])
 
+    def updateSetpoint(self, t):
+        # always starts at the default value (0), then does some nonlinear multisine path
+        if self.t_o == 0:
+            self.t_o = (np.random.random() * 3) + t
+            self.setpoint1 = 0
+            self.setpoint2 = 0
+
+        if t > self.t_o:
+            self.t_o = (np.random.random() * 6) + t
+
+            self.setpoint1 = (np.random.random() - .5) * 10
+            self.setpoint2 = (np.random.random() - .5) * 10
+
+        # if all(self.setpointFreq == np.zeros(3)):
+        #     self.setpointFreq = np.random.random(3) * 15
+        #     self.setpointAmp = np.random.random(3) * 8
+        #
+        # setpoint1 = np.sum(A * np.sin(t * f) for A, f in zip(self.setpointAmp, self.setpointFreq))
+        # setpoint2 = np.sum(A * np.sin(-t * f) for A, f in zip(self.setpointAmp, self.setpointFreq))
+
+        self.pSetpoints.append(self.setpoint1)
+        self.qSetpoints.append(self.setpoint2)
+
+        return self.setpoint1, self.setpoint2
+
+
+    def run_sim(self, x_init, plot=False, updateSetpoints=False, t_max = 600):
+        t = 0#.01
+        dt = .01
+        times = []
+        plt.ion()
+        # altController = PIDcontrol.PIDControl('Alt', Kp=50, Ki=6, Kd=28, timeStep=dt, open=False)
+        altControl = PIDcontrol.PIDControl('Alt', Kp=11, Ki=1.1, Kd=5, timeStep=dt, open=False)
+        rollControl = PIDcontrol.PIDControl('Roll', Kp=20, Ki=1, Kd=0.1, timeStep=dt, open=False)
+        pitchControl = PIDcontrol.PIDControl('Pitch', Kp=20, Ki=1, Kd=0.1, timeStep=dt, open=False)
+        yawControl = PIDcontrol.PIDControl('Yaw', Kp=600, Ki=0, Kd=.1, timeStep=dt, open=True)
+
+        xControl = PIDcontrol.PIDControl('X', Kp=.015, Ki=0, Kd=0, timeStep=dt, open=True)
+        yControl = PIDcontrol.PIDControl('Y', Kp=.015, Ki=0, Kd=0, timeStep=dt, open=True)
+        # yControl = PIDcontrol.PIDControl('Y', Kp = .015, Ki = .000001, Kd = .1, timeStep = dt, open = True)
+        slowYawControl = PIDcontrol.PIDControl('slowYaw', Kp=2, Ki=.01, timeStep=dt, Kd=.02, open=True)
+
+        ds = droneSim(altControl, rollControl, pitchControl, yawControl, xControl, yControl, slowYawControl)
+        next = False
+
+        x = x_init.copy()
+        # x[3] = -.2
+        # x[4] = .2
+        # x[5] = .8
+
+        for i in range(1, t_max+1):
+            times.append(t)
+            t += dt
+            # x = ds.randomWind(x)
+            # if next == True:
+            #     x[3] = (np.random.random()) * 1.8915436 * 3
+            #     x[4] = (np.random.random()) * 1.8915436 * 3
+            #     next = False
+            # if i % 50 == 0:
+            #     next = True
+                # x[3] = (np.random.random()) * 1.8915436 * 3
+                # x[4] = (np.random.random()) * 1.8915436 * 3
+            if updateSetpoints == True:
+                p,q = ds.updateSetpoint(t)
+                errs = ds.calculateError(x, [1000, p, q, 0])
+            else:
+                errs = ds.calculateError(x, ds.controlInputs(x, t))
+
+            x_next, currU, xdot = ds.numericalIntegration(x, errs, dt)
+            a1, a2, a3, a4 = ds.processControlInputs(currU)
+
+            u1.append(currU[0])
+            u2.append(currU[1])
+            u3.append(currU[2])
+            u4.append(currU[3])
+
+            # u1.append(a1)
+            # u2.append(a2)
+            # u3.append(a3)
+            # u4.append(a4)
+
+            # Check for ground collision
+            if x_next[11] < .05:
+                x_next[2] = np.min([x[2], x_next[2], 0])
+                x_next[11] = np.max([x[11], x_next[11], .05])
+
+                x_next[3] = 0
+                x_next[4] = 0
+                x_next[5] = 0
+
+            ds.memory(x_next)
+            x = x_next
+
+            # if t > 5:
+            #     print('tt')
+
+        controlsDf = pd.DataFrame(np.array([u1, u2, u3, u4]).T, columns=['u1', 'u2', 'u3', 'u4'])
+
+        self.pSetpoints = ds.pSetpoints
+        self.qSetpoints = ds.qSetpoints
+        if plot==True:
+            df = plotStuff(times, ds.xdot_b, ds.ydot_b, ds.zdot_b, ds.p, ds.q, ds.r, ds.phi, ds.theta, ds.psi, ds.x, ds.y,
+                           ds.z, controlsDf['u1'], controlsDf['u2'], controlsDf['u3'], controlsDf['u4'], title='_PID')
+        else:
+            df = pd.DataFrame(list(zip(times, ds.xdot_b, ds.ydot_b, ds.zdot_b, ds.p, ds.q, ds.r, ds.phi, ds.theta, ds.psi, ds.x, ds.y,
+                           ds.z, controlsDf['u1'], controlsDf['u2'], controlsDf['u3'], controlsDf['u4'])),
+                              columns=['t', 'xdot_b', 'ydot_b', 'zdot_b', 'p', 'q', 'r', 'phi', 'theta', 'psi', 'x',
+                                       'y', 'z', 'u1', 'u2', 'u3', 'u4'])
+
+        return df
 
 if __name__ == "__main__":
     t = 0
@@ -519,8 +646,8 @@ if __name__ == "__main__":
     plt.ion()
     # altController = PIDcontrol.PIDControl('Alt', Kp=50, Ki=6, Kd=28, timeStep=dt, open=False)
     altControl = PIDcontrol.PIDControl('Alt', Kp =11, Ki = 1.1, Kd = 5, timeStep = dt, open = False)
-    rollControl = PIDcontrol.PIDControl('Roll', Kp = 8, Ki = 6, Kd = 8, timeStep = dt, open = True)
-    pitchControl = PIDcontrol.PIDControl('Pitch', Kp = 8, Ki = 6, Kd = 8, timeStep = dt, open = True)
+    rollControl = PIDcontrol.PIDControl('Roll', Kp = 20, Ki = 1, Kd = .1, timeStep = dt, open = False)
+    pitchControl = PIDcontrol.PIDControl('Pitch', Kp = 20, Ki = 1, Kd = .1, timeStep = dt, open = False)
     yawControl = PIDcontrol.PIDControl('Yaw', Kp = 600, Ki = 0, Kd = .1, timeStep = dt, open = True)
 
     xControl = PIDcontrol.PIDControl('X', Kp = .015, Ki = 0, Kd = 0, timeStep = dt, open = True)
@@ -530,21 +657,19 @@ if __name__ == "__main__":
 
     ds = droneSim(altControl, rollControl, pitchControl, yawControl, xControl, yControl, slowYawControl)
 
-
-
     x = ds.stateMatrixInit()
-    # x[3] = -.2
-    # x[4] = .2
+    x[3] = 1
+    x[4] = -1
     # x[5] = .8
 
-    while t < 10:
+    while t < 6:
         times.append(t)
         t += dt
         # x = ds.randomWind(x)
 
         errs = ds.calculateError(x, ds.controlInputs(x,t))
 
-        x_next, currU = ds.numericalIntegration(x, errs, dt)
+        x_next, currU, xdot = ds.numericalIntegration(x, errs, dt)
         a1, a2, a3, a4 = ds.processControlInputs(currU)
 
         u1.append(currU[0])
@@ -573,9 +698,10 @@ if __name__ == "__main__":
         # if t > 5:
         #     print('tt')
 
-    df = plotStuff(times, ds.xdot_b, ds.ydot_b, ds.zdot_b, ds.p, ds.q, ds.r, ds.phi, ds.theta,ds.psi, ds.x, ds.y, ds.z, u1, u2, u3, u4, title = 't')
+    controlsDf = pd.DataFrame(np.array([u1, u2, u3, u4]).T, columns = ['u1','u2','u3','u4'])
 
-
+    df = plotStuff(times, ds.xdot_b, ds.ydot_b, ds.zdot_b, ds.p, ds.q, ds.r, ds.phi, ds.theta,ds.psi, ds.x, ds.y, ds.z,
+                   controlsDf['u1'], controlsDf['u2'], controlsDf['u3'], controlsDf['u4'], title = 't')
 
     with open(r'C:\Users\Stephen\PycharmProjects\QuadcopterSim\visualizer\test.js', 'w') as outfile:
         outfile.truncate(0)
