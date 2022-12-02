@@ -10,12 +10,12 @@ A direct port to a HIL test environment would likely not work due to some simpli
 The framework used for this project closely adheres to the [OpenAI Gym](https://github.com/openai/gym) style and is built off of [stable_baselines](https://github.com/hill-a/stable-baselines) model implementations. 
 Due to this software versions are very specific - module versions are defined in the requirements.txt file and python needs to.  Running in a virtual environment is highly recommended.
 
-##How to Run
-Once this repo is cloned and a virtual environment is set up per the requirements file, you can then generate a new model by running the main.py file.
+## How to Run
+Once this repo is cloned, and a virtual environment is set up per the requirements file, you can then generate a new model by running the main.py file.
 You can visualize this training by opening up a tensorboard server pointing at the file being generated in the drone_tensorboard folder
 This starts off by default with a pre-trained model called aboutAsGood that's currently save in the repository - that model can be used as a suboptimal initial state.
 
 
-##Visualization
+## Visualization
 In order to visualize the flight of a single episode, you must insert calls to the env.render() function somewhere in the training (currently it's called once at the end of the training run).
 That generates a data file that can then be shown in browser by opening the sim_vis.html file in the visualizier folder (the datafile will have to be renamed to test.json for now if you don't want to update the code)
