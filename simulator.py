@@ -147,6 +147,13 @@ class droneSim():
         self.rateLimitDown = 4
         self.prevU = np.zeros(4)
 
+        self.angular_rate_sp = [0,0,0]#
+        self.setpointFreq = np.zeros(3)
+        self.setpointAmp = np.zeros(3)
+        self.pSetpoints = [0]
+        self.qSetpoints = [0]
+        self.t_o = 0
+
 
     def stateMatrixInit(self):
         x = np.zeros(12)
@@ -476,7 +483,7 @@ class droneSim():
 
 
         # if t < 7:
-        altSetpoint = 10
+        altSetpoint = 1000
         # elif 7<=t<12:
         #     altSetpoint = 2
         # else:
@@ -521,16 +528,41 @@ class droneSim():
         self.y.append(x[10])
         self.z.append(x[11])
 
+    def updateSetpoint(self, t):
+        # always starts at the default value (0), then does some nonlinear multisine path
+        if self.t_o == 0:
+            self.t_o = (np.random.random() * 3) + t
+            self.setpoint1 = 0
+            self.setpoint2 = 0
 
-    def run_sim(self, x_init):
-        t = 0
+        if t > self.t_o:
+            self.t_o = (np.random.random() * 6) + t
+
+            self.setpoint1 = (np.random.random() - .5) * 10
+            self.setpoint2 = (np.random.random() - .5) * 10
+
+        # if all(self.setpointFreq == np.zeros(3)):
+        #     self.setpointFreq = np.random.random(3) * 15
+        #     self.setpointAmp = np.random.random(3) * 8
+        #
+        # setpoint1 = np.sum(A * np.sin(t * f) for A, f in zip(self.setpointAmp, self.setpointFreq))
+        # setpoint2 = np.sum(A * np.sin(-t * f) for A, f in zip(self.setpointAmp, self.setpointFreq))
+
+        self.pSetpoints.append(self.setpoint1)
+        self.qSetpoints.append(self.setpoint2)
+
+        return self.setpoint1, self.setpoint2
+
+
+    def run_sim(self, x_init, plot=False, updateSetpoints=False, t_max = 600):
+        t = 0#.01
         dt = .01
         times = []
         plt.ion()
         # altController = PIDcontrol.PIDControl('Alt', Kp=50, Ki=6, Kd=28, timeStep=dt, open=False)
         altControl = PIDcontrol.PIDControl('Alt', Kp=11, Ki=1.1, Kd=5, timeStep=dt, open=False)
-        rollControl = PIDcontrol.PIDControl('Roll', Kp=30, Ki=0, Kd=0, timeStep=dt, open=False)
-        pitchControl = PIDcontrol.PIDControl('Pitch', Kp=30, Ki=0, Kd=0, timeStep=dt, open=False)
+        rollControl = PIDcontrol.PIDControl('Roll', Kp=20, Ki=1, Kd=0.1, timeStep=dt, open=False)
+        pitchControl = PIDcontrol.PIDControl('Pitch', Kp=20, Ki=1, Kd=0.1, timeStep=dt, open=False)
         yawControl = PIDcontrol.PIDControl('Yaw', Kp=600, Ki=0, Kd=.1, timeStep=dt, open=True)
 
         xControl = PIDcontrol.PIDControl('X', Kp=.015, Ki=0, Kd=0, timeStep=dt, open=True)
@@ -539,18 +571,30 @@ class droneSim():
         slowYawControl = PIDcontrol.PIDControl('slowYaw', Kp=2, Ki=.01, timeStep=dt, Kd=.02, open=True)
 
         ds = droneSim(altControl, rollControl, pitchControl, yawControl, xControl, yControl, slowYawControl)
+        next = False
 
-        x = x_init
+        x = x_init.copy()
         # x[3] = -.2
         # x[4] = .2
         # x[5] = .8
 
-        while t < 6:
+        for i in range(1, t_max+1):
             times.append(t)
             t += dt
             # x = ds.randomWind(x)
-
-            errs = ds.calculateError(x, ds.controlInputs(x, t))
+            # if next == True:
+            #     x[3] = (np.random.random()) * 1.8915436 * 3
+            #     x[4] = (np.random.random()) * 1.8915436 * 3
+            #     next = False
+            # if i % 50 == 0:
+            #     next = True
+                # x[3] = (np.random.random()) * 1.8915436 * 3
+                # x[4] = (np.random.random()) * 1.8915436 * 3
+            if updateSetpoints == True:
+                p,q = ds.updateSetpoint(t)
+                errs = ds.calculateError(x, [1000, p, q, 0])
+            else:
+                errs = ds.calculateError(x, ds.controlInputs(x, t))
 
             x_next, currU, xdot = ds.numericalIntegration(x, errs, dt)
             a1, a2, a3, a4 = ds.processControlInputs(currU)
@@ -582,9 +626,16 @@ class droneSim():
 
         controlsDf = pd.DataFrame(np.array([u1, u2, u3, u4]).T, columns=['u1', 'u2', 'u3', 'u4'])
 
-        df = plotStuff(times, ds.xdot_b, ds.ydot_b, ds.zdot_b, ds.p, ds.q, ds.r, ds.phi, ds.theta, ds.psi, ds.x, ds.y,
-                       ds.z,
-                       controlsDf['u1'], controlsDf['u2'], controlsDf['u3'], controlsDf['u4'], title='_PID')
+        self.pSetpoints = ds.pSetpoints
+        self.qSetpoints = ds.qSetpoints
+        if plot==True:
+            df = plotStuff(times, ds.xdot_b, ds.ydot_b, ds.zdot_b, ds.p, ds.q, ds.r, ds.phi, ds.theta, ds.psi, ds.x, ds.y,
+                           ds.z, controlsDf['u1'], controlsDf['u2'], controlsDf['u3'], controlsDf['u4'], title='_PID')
+        else:
+            df = pd.DataFrame(list(zip(times, ds.xdot_b, ds.ydot_b, ds.zdot_b, ds.p, ds.q, ds.r, ds.phi, ds.theta, ds.psi, ds.x, ds.y,
+                           ds.z, controlsDf['u1'], controlsDf['u2'], controlsDf['u3'], controlsDf['u4'])),
+                              columns=['t', 'xdot_b', 'ydot_b', 'zdot_b', 'p', 'q', 'r', 'phi', 'theta', 'psi', 'x',
+                                       'y', 'z', 'u1', 'u2', 'u3', 'u4'])
 
         return df
 
@@ -595,8 +646,8 @@ if __name__ == "__main__":
     plt.ion()
     # altController = PIDcontrol.PIDControl('Alt', Kp=50, Ki=6, Kd=28, timeStep=dt, open=False)
     altControl = PIDcontrol.PIDControl('Alt', Kp =11, Ki = 1.1, Kd = 5, timeStep = dt, open = False)
-    rollControl = PIDcontrol.PIDControl('Roll', Kp = 30, Ki = 0, Kd = 0, timeStep = dt, open = False)
-    pitchControl = PIDcontrol.PIDControl('Pitch', Kp = 30, Ki = 0, Kd = 0, timeStep = dt, open = False)
+    rollControl = PIDcontrol.PIDControl('Roll', Kp = 20, Ki = 1, Kd = .1, timeStep = dt, open = False)
+    pitchControl = PIDcontrol.PIDControl('Pitch', Kp = 20, Ki = 1, Kd = .1, timeStep = dt, open = False)
     yawControl = PIDcontrol.PIDControl('Yaw', Kp = 600, Ki = 0, Kd = .1, timeStep = dt, open = True)
 
     xControl = PIDcontrol.PIDControl('X', Kp = .015, Ki = 0, Kd = 0, timeStep = dt, open = True)
@@ -607,8 +658,8 @@ if __name__ == "__main__":
     ds = droneSim(altControl, rollControl, pitchControl, yawControl, xControl, yControl, slowYawControl)
 
     x = ds.stateMatrixInit()
-    # x[3] = -.2
-    # x[4] = .2
+    x[3] = 1
+    x[4] = -1
     # x[5] = .8
 
     while t < 6:

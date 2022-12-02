@@ -15,8 +15,8 @@ class PIDControl():
         self.us = [0]
         self.prevU = 0
         self.du = 0
-        self.rateLimitUp = 2
-        self.rateLimitDown = 8
+        self.rateLimitUp = 4#2
+        self.rateLimitDown = 4#8
         self.dt = timeStep
 
         self._integral = 0

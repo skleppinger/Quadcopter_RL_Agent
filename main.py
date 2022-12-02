@@ -74,13 +74,16 @@ def lrGenerator(t):
 
 env = gym.make('droneGym-v0')
 
-model = PPO2(MlpPolicy, env, verbose = 0,n_steps = 3000, nminibatches=1,tensorboard_log="./drone_tensorboard/", gamma=.90)
+# model = PPO2(MlpPolicy, env, verbose = 0, nminibatches=1,tensorboard_log="./drone_tensorboard/", gamma=.995, ent_coef=0.022653175616929,
+#              lam=.995, learning_rate=0.000099704380922357, n_steps=256, noptepochs=10)
+model = PPO2(MlpPolicy, env, verbose = 0, nminibatches=1,tensorboard_log="./drone_tensorboard/", gamma=.999, ent_coef=0.00000444,
+             lam=.95, learning_rate=0.000099704380922357, n_steps=512, noptepochs=20)
 # model = PPO2(CustomPolicy, env, verbose = 0, n_steps = 3000, nminibatches=1,tensorboard_log="./drone_tensorboard/")
-model = model.load('Interim_fixedLeftTruns2.zip')
+model = model.load('aboutAsGood_update.zip')
 model.full_tensorboard_log = True
 model.tensorboard_log = "./drone_tensorboard/"
 # model.learning_rate = lrGenerator
-model.learning_rate = .00013
+# model.learning_rate = .00013
 model.env = DummyVecEnv([lambda: env])
 model.learn(total_timesteps=100000000000)
 
