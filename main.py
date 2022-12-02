@@ -1,9 +1,9 @@
 import numpy as np
 import envs
 import gym
-from stable_baselines.common.policies import MlpPolicy, ActorCriticPolicy, register_policy, nature_cnn, mlp_extractor
+from stable_baselines.common.policies import MlpPolicy, ActorCriticPolicy, mlp_extractor
 from stable_baselines.common.vec_env import DummyVecEnv
-from stable_baselines import PPO2, A2C
+from stable_baselines import PPO2
 from matplotlib import pyplot as plt
 import tensorflow as tf
 
@@ -12,6 +12,8 @@ env = gym.make('droneGym-v0')
 
 # Custom MLP policy of three layers of size 128 each for the actor and 2 layers of 32 for the critic,
 # with a nature_cnn feature extractor
+
+
 class CustomPolicy(ActorCriticPolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=False, **kwargs):
         super(CustomPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=reuse, scale=True)
@@ -20,14 +22,8 @@ class CustomPolicy(ActorCriticPolicy):
         with tf.compat.v1.variable_scope("model", reuse=reuse):
             activ = tf.nn.relu
 
-            # pi_latent2, vf_latent2 = mlp_extractor(self.processed_obs,net_arch = [128, dict(vf=[156, 156], pi=[128])], act_fun = tf.nn.relu, **kwargs)
-            # actionSpace = tf.compat.v1.layers.dense(pi_latent2, ac_space.n, activation= 'sigmoid', name = 'pf')
-            # value_fn = tf.compat.v1.layers.dense(vf_latent2, 1, name='vf')
-            # vf_latent = vf_latent2
-
             shapesShared = [256]
             extracted_features = mlp_extractor(self.processed_obs, shapesShared, activ)
-            # extracted_features = mlp_extractor(extracted_features, shapesShared, activ)
 
             pi_h = extracted_features[0]
             shapesp = [128, 64]
@@ -39,7 +35,7 @@ class CustomPolicy(ActorCriticPolicy):
             pi_latent = pi_h
 
             vf_h = extracted_features[1]
-            shapesv = [64,64]
+            shapesv = [64, 64]
             for i, layer_size in enumerate(shapesv):
                 vf_h = activ(tf.compat.v1.layers.dense(vf_h, layer_size, name='vf_fc' + str(i)))
             value_fn = tf.compat.v1.layers.dense(vf_h, 1, name='vf')
@@ -76,9 +72,9 @@ env = gym.make('droneGym-v0')
 
 # model = PPO2(MlpPolicy, env, verbose = 0, nminibatches=1,tensorboard_log="./drone_tensorboard/", gamma=.995, ent_coef=0.022653175616929,
 #              lam=.995, learning_rate=0.000099704380922357, n_steps=256, noptepochs=10)
-model = PPO2(MlpPolicy, env, verbose = 0, nminibatches=1,tensorboard_log="./drone_tensorboard/", gamma=.999, ent_coef=0.00000444,
-             lam=.95, learning_rate=0.000099704380922357, n_steps=512, noptepochs=20)
-# model = PPO2(CustomPolicy, env, verbose = 0, n_steps = 3000, nminibatches=1,tensorboard_log="./drone_tensorboard/")
+model = PPO2(MlpPolicy, env, verbose=0, nminibatches=1, tensorboard_log="./drone_tensorboard/", gamma=.999,
+             ent_coef=0.00000444, lam=.95, learning_rate=0.000099704380922357, n_steps=512, noptepochs=20)
+
 model = model.load('aboutAsGood_update.zip')
 model.full_tensorboard_log = True
 model.tensorboard_log = "./drone_tensorboard/"
@@ -87,9 +83,7 @@ model.tensorboard_log = "./drone_tensorboard/"
 model.env = DummyVecEnv([lambda: env])
 model.learn(total_timesteps=100000000000)
 
-
-
-# set up plotter, hope it's  
+# set up plotter
 plt.ion()
 fig, [ax1, ax2] = plt.subplots(2, 1, sharex=True)
 h1, = ax1.plot([], [], 'b.', label='Reward')
@@ -105,15 +99,9 @@ for i in range(1000):
 
     h1.set_xdata(np.append(h1.get_xdata(), i))
     h1.set_ydata(np.append(h1.get_ydata(), rewards))
-    # h2.set_xdata(np.append(h2.get_xdata(), i))
-    # h2.set_ydata(np.append(h2.get_ydata(), running_loss))
     ax1.relim()
     ax1.autoscale_view()
-    # ax2.relim()
-    # ax2.autoscale_view()
-    # ax.plot(range(0,i+1), running_reward,'b.', label = 'Reward')
-    # ax.plot(range(0,i+1), running_loss,'y.', label = 'Loss')
-    # ax.legend()
+
     plt.draw()
     fig.canvas.flush_events()
 

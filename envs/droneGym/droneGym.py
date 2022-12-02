@@ -18,8 +18,7 @@ Iyy = 0.0093   #kg-m^2
 Izz = .0151
 Ir = .0066 #rotor moment of inertia
 dx = 0.214     #m
-# dy = 0.0825     #m
-dy = dx
+dy = dx        #m
 dragCoef = 4.406*10**-7 #kg*m^2*s^-1
 g = 9.81  #m/s/s
 DTR = 1/57.3; RTD = 57.3
@@ -27,7 +26,10 @@ thrustCoef = 1.5108 * 10**-5 #kg*m
 
 
 class droneGym(gym.Env):
-    """Custom Environment that follows gym interface"""
+    '''Custom Environment that follows gym interface
+    This models a small quadcopter drone operating in a endless void
+    The ground is considered but only from a reward perspective
+    Collisions are elastic and ground-effect turbulence aren't considered'''
     dt: float
     metadata = {'render.modes': ['human']}
 
@@ -44,10 +46,7 @@ class droneGym(gym.Env):
             writer.writerow(['Time','Simulated Time','Failed on','Reward','Altitude (m)', 'Roll','Pitch','Yaw', 'X_distance','Y_distance'])
 
         # Define action and observation space
-        # self.action_space = spaces.Box(low = np.array((0,0,0,0)), high = np.array((1,1,1,1)))
         self.action_space = spaces.Box(low = np.array((0,0,0)), high = np.array((1,1,1)))
-        # self.action_space = spaces.Box(low = np.array((0,0,0,0)), high = np.array((100,100,100,100)))
-        # self.action_space = spaces.Tuple((spaces.Discrete(2),spaces.Discrete(2),spaces.Discrete(2),spaces.Discrete(2)))
 
         self.action_space.n = 3
 
@@ -55,8 +54,6 @@ class droneGym(gym.Env):
 
         self.x = self.stateMatrixInit()
 
-        # self.observation_space = spaces.Box(low=np.array((-100,-100,-100,0,0,0,0,0,0,-100,-100,-100,-100,-100,-100)), high=np.array((100,100,100,7,7,7,7,7,7,100,100,100,100,100,100)))
-        # self.observation_space = spaces.Box(low=np.array((-np.inf,-np.inf,-np.inf,-np.inf)), high=np.array((np.inf,np.inf,np.inf,np.inf)))
         self.observation_space = spaces.Box(low=np.array((-np.inf,-np.inf,-np.inf,-np.inf,-np.inf,-np.inf,-np.inf)), high=np.array((np.inf,np.inf,np.inf,np.inf,np.inf,np.inf,np.inf)))
 
         self.rateLimitUp = 4
@@ -64,19 +61,20 @@ class droneGym(gym.Env):
 
         self.reward_range = np.array((-np.inf,1))
 
+        #These following lists expand the state space vector into a form for visualization
         self.times = [self.t]
-        self.xdot_b = []#latitudinal velocity body frame
-        self.ydot_b = []#latitudinal velocity body frame
-        self.zdot_b = []#latitudinal velocity body frame
-        self.p = []#rotational velocity body frame
-        self.q = []#rotational velocity body frame
-        self.r = []#rotational velocity body frame
-        self.phi = []#euler rotation global frame
-        self.theta = []#euler rotation global frame
-        self.psi = []#euler rotation global frame
-        self.xpos = []#global x position
-        self.y = []#global y position
-        self.z = []#global z position
+        self.xdot_b = []  #latitudinal velocity body frame
+        self.ydot_b = []  #latitudinal velocity body frame
+        self.zdot_b = []  #latitudinal velocity body frame
+        self.p = []  #rotational velocity body frame
+        self.q = []  #rotational velocity body frame
+        self.r = []  #rotational velocity body frame
+        self.phi = []  #euler rotation global frame
+        self.theta = []  #euler rotation global frame
+        self.psi = []  #euler rotation global frame
+        self.xpos = []  #global x position
+        self.y = []  #global y position
+        self.z = []  #global z position
         self.p_e = []
         self.q_e = []
         self.r_e = []
@@ -135,45 +133,23 @@ class droneGym(gym.Env):
         return u
 
     def step(self, action):
-        # Execute one time step within the environment
-        #This is where we're accepting the action requirements from the RL agent
-        #Right now since we're producing sigmoid outputs, we're modifying the inputs accordingly
-        #Action[0] = z target (in meters?  Currently unused)
-        #Action[1] = Phi Reference Angle (x, in drone reference frame)
-        #Action[2] = Theta Reference Angle (y, in drone reference frame)
-        # self.updateSetpoint()
-        maxAngleAllowed = .6457718 #around 37 degrees
-        # if len(action) < 3:
-        #     newAct = np.zeros(3)
-        #     for i,n in enumerate(action):
-        #         newAct[i] = 1/(1+ np.exp(-n))
-        #     action = newAct
+        '''Execute one time step within the environment
+        This is where we're accepting the action requirements from the RL agent
+        Right now since we're producing sigmoid outputs, we're modifying the inputs accordingly
+        Action[0] = z target (in meters?  Currently unused)
+        Action[1] = Phi Reference Angle (x, in drone reference frame)
+        Action[2] = Theta Reference Angle (y, in drone reference frame)'''
 
-        # action[0] = (action[0]/200 + .5) * 100
-        # action[0] = (action[0] -.5)*10 #Z velocity estimate?
-        # action[0] = (action[0]) * 50 #Z position Target?
-        # action[1:] = [(i-.5)*maxAngleAllowed for i in action[1:]]
-        # action = np.append(action,0)
         temp = action
         self.actionnn = action
         action = action * 100
         action[1:] = action[1:] - 50
-
-        # action[0] = action[0]*1.5
-        # if action[0]>100: action[0] = 100
 
         temp = action
 
         action = self.checkActionStepSize(action)
         self.actionActual = action[0:3]
 
-        if np.isnan(action[0]):
-            print('tt')
-
-        # self.uActions = self.createUs(self.x, action)
-        # x_next = self.numericalIntegration(self.x,self.uActions,self.dt)
-
-        # x_next = self.numericalIntegration(self.x,action,self.dt)
         self.ds.x = self.x[0:12]
         tempX, currU, xdot = self.ds.numericalIntegration(self.x[0:12], action, self.dt, errsIsControl=True)
         x_next = np.zeros(16)
@@ -186,15 +162,8 @@ class droneGym(gym.Env):
             x_next[2] = np.min([self.x[2],x_next[2],0])
             x_next[11] = np.max([self.x[11],x_next[11],0])
 
-            # x_next[3] = 0
-            # x_next[4] = 0
-            # x_next[5] = 0
-
         reward, done = self.calcReward(self.x)
 
-        # x_next[14] = x_next[11] - self.zSet
-        # x_next[13] = x_next[10] - self.ySet
-        # x_next[12] = x_next[9] - self.xSet
         x_next[14] = x_next[5] - self.angular_rate_sp[2]
         x_next[13] = x_next[4] - self.angular_rate_sp[1]
         x_next[12] = x_next[3] - self.angular_rate_sp[0]
@@ -212,7 +181,6 @@ class droneGym(gym.Env):
 
 
     def add_noise(self, x):
-
         for i in range(0,len(x)):
             x[i] = np.random.uniform(-.05,.05) * x[i] + x[i]
 
@@ -225,18 +193,18 @@ class droneGym(gym.Env):
         self.x = self.stateMatrixInit()
 
         self.times = [self.t]
-        self.xdot_b = []#latitudinal velocity body frame
-        self.ydot_b = []#latitudinal velocity body frame
-        self.zdot_b = []#latitudinal velocity body frame
-        self.p = []#rotational velocity body frame
-        self.q = []#rotational velocity body frame
-        self.r = []#rotational velocity body frame
-        self.phi = []#euler rotation global frame
-        self.theta = []#euler rotation global frame
-        self.psi = []#euler rotation global frame
-        self.xpos = []#global x position
-        self.y = []#global y position
-        self.z = []#global z position
+        self.xdot_b = []  #latitudinal velocity body frame
+        self.ydot_b = []  #latitudinal velocity body frame
+        self.zdot_b = []  #latitudinal velocity body frame
+        self.p = []  #rotational velocity body frame
+        self.q = []  #rotational velocity body frame
+        self.r = []  #rotational velocity body frame
+        self.phi = []  #euler rotation global frame
+        self.theta = []  #euler rotation global frame
+        self.psi = []  #euler rotation global frame
+        self.xpos = []  #global x position
+        self.y = []  #global y position
+        self.z = []  #global z position
 
         self.u1 = []
         self.u2 = []
@@ -293,8 +261,10 @@ class droneGym(gym.Env):
 
 
     def render(self, mode='human', close=False, epNum = 0, start = False):
-        # Render the environment to the screen
+        # Render the environment to the screenf
         newfileName = "Flight_run_ep_" + str(epNum)
+        if not os.path.exists("visualizer"):
+            os.mkdir("visualizer")
 
         if start == True:
             return self.x
@@ -315,7 +285,7 @@ class droneGym(gym.Env):
 
 
         dfAction = pd.DataFrame(list(zip(self.u1, self.u2, self.u3, self.u4)), columns = ['U1','U2','U3','U4'])
-        with open(os.path.join(r'C:\Users\Stephen\PycharmProjects\QuadcopterSim\visualizer',newfileName + '.js'), 'w') as outfile:
+        with open(os.path.join(r'visualizer',newfileName + '.js'), 'w') as outfile:
             outfile.truncate(0)
             outfile.write("var sim_data = [ \n")
             json.dump([i for i in self.times[0:-1]], outfile, indent=4)
@@ -330,73 +300,21 @@ class droneGym(gym.Env):
             json.dump(parsed, outfile, indent=4)
             outfile.write("]")
 
-        df2.to_csv(r'C:\Users\Stephen\PycharmProjects\QuadcopterSim\visualizer\temp.csv')
+        df2.to_csv(r'visualizer\temp.csv')
 
 
     def calcReward(self, state, output_for_sim = False):
-        #calculate reward based off of distance from setpoints
+        # calculate reward based off of distance from setpoints
         done = False
 
-        # if self.t < 5:
-        # xSet = self.xSetRandom
-        # ySet = self.ySetRandom
-        # zSet = 10
-        # # else:# self.t >= 5 and self.t<10:
-        # #     xSet = -self.ySetRandom
-        # #     ySet = -self.xSetRandom
-        # #     zSet = 10
-        # # elif self.t >= 10 and self.t < 15:
-        # #     xSet = -5
-        # #     ySet = 5
-        # #     zSet = 12
-        # # else:
-        # # xSet = 0
-        # # ySet = 0
-        # # zSet = 10
-        #
-        # self.xSet = xSet
-        # self.ySet = ySet
-        # self.zSet = zSet
-        #
-        # zErr, xErr, yErr = self.calculateError(state, [zSet, xSet, ySet])
-        # # desiredZvel = -self.altControl.updateControl(zErr)
-        # # desiredXvel = self.xControl.updateControl(xErr)
-        # # desiredYvel = self.yControl.updateControl(yErr)
-        # phiRef, thetaRef = self.globalNeededThrust(state, xErr, yErr)
-        # # totRefs = [0, 0, 0, phiRef, thetaRef, 0]
-        # # totRefs = [0, 0, 0, 0, 0, 0]
-        # totRefs = [phiRef, thetaRef, 0]
-
-
-        ###
-        #This is the calcualtion of the reward generated at each time step
-        #The currently uncommented reward calculaction has a penalty of -1, and a reduction for when the drone moves towards the target
-        #Other rewards listed here focus on minimizing the absolute distance, or rewarding small angles and short lasting flights
-        ###
-
-
-        # reward_unlog = 2.23606797749979 - np.sqrt(self.distin3d(state[9], state[10], state[11], xSet, ySet, zSet)) #sqrt of 0,0,5 position
-        # reward = 10 * (np.exp(reward_unlog)/(np.exp(reward_unlog) + 1) - .5)
-        # dist = self.distin3d(state[9], state[10], state[11], xSet, ySet, zSet)  # sqrt of 0,0,5 position
-        # dist2d = self.distin3d(state[9], state[10], zSet, xSet, ySet, zSet)
-        # # reward = round(reward)
-        # # reward = -np.clip(np.sum(np.abs([(state[n]-totRefs[i]) for i,n in enumerate([6,7,8])])),0,1)
-        # reward = -1 + 10*(self.prevDist-dist2d)#/(np.sqrt(self.xSet**2 + self.ySet**2))
-        #
-        # self.prevDist = dist2d
         maxAngleAllowed = 0.5745329
-        # pitch_bad = not(-maxAngleAllowed < state[6] < maxAngleAllowed) and self.t > .4
-        # roll_bad = not(-maxAngleAllowed < state[7] < maxAngleAllowed) and self.t > .4
+
         roll_bad = ((2*np.pi)-maxAngleAllowed) > np.abs(state[6]) > maxAngleAllowed
         pitch_bad = ((2*np.pi)-maxAngleAllowed) > np.abs(state[7]) > maxAngleAllowed
         alt_bad = not(.1 < state[11] < 100) and self.t > 1
-        #
-        # self.rewardList.append(reward)
-        # goodDist = 3 #in m
+
 
         self.true_error = self.angular_rate_sp - np.array([state[3], state[4], state[5]])
-        # self.true_error += self.angular_rate_sp - self.globalAngularVel
-        # self.true_error = self.angular_rate_sp - np.array([state[0], state[1], state[2]])
         shaping = -np.sum(self.true_error**2)
 
         e_penalty = 0
@@ -422,9 +340,9 @@ class droneGym(gym.Env):
         else:
             angleThreshPunishment = .2
 
+        # Weighted list of factors contributing to the total reward for the point in time of the episode
         rewards = [
             -.1 * np.max(np.abs(self.actionnn - self.prev_action)),
-            # min_y_reward,
             angleThreshPunishment,
             .4*e_penalty,
             -.1 * np.sum(self.oversaturation_high()),
@@ -441,14 +359,6 @@ class droneGym(gym.Env):
 
 
         if self.t > 6: #or pitch_bad or roll_bad or alt_bad:# or dist<goodDist:
-            # if self.t > 9.8:
-            #     reward = 400
-            #     # reward = 1
-            #     self.rewardList.append(reward)
-            # else:
-            #     reward = 10000*self.t - 4000
-            #     # reward = -10
-            #     self.rewardList.append(reward)
             done = True
 
             failer = ''
@@ -458,10 +368,6 @@ class droneGym(gym.Env):
                 failer += 'Roll'
             if alt_bad:
                 failer += "Alt"
-            # if dist<goodDist:
-            #     failer += "Dist"
-            #     reward = 80
-
 
             with open(self.diagPath, 'a', newline = '') as csvFile:
                 writer = csv.writer(csvFile)
@@ -510,7 +416,7 @@ class droneGym(gym.Env):
             return 0
 
     def distin3d(self,x1,y1,z1,x2,y2,z2):
-        #calculate distance in 3d space
+        #  calculate distance in 3d space
         return(np.sqrt(np.power(x2-x1,2) + np.power(y2-y1,2) + np.power(z2-z1,2)))
 
     def memory(self,x, action):
@@ -542,8 +448,8 @@ class droneGym(gym.Env):
     def stateMatrixInit(self):
         x = np.zeros(16)
         # x[2] = -.049
-        x[11] = 1000#.049
-        x[12] = 0#9.951
+        x[11] = 1000  #.049
+        x[12] = 0  #9.951
         x[3] = (np.random.random()-.5)*1.8915436*2
         x[4] = (np.random.random()-.5)*1.8915436*2
         # x[5] = np.random.random()*.3457718
@@ -596,12 +502,11 @@ class droneGym(gym.Env):
             thetaRef = 0
         else:
             thetaRef = s*np.arccos(1/(np.cos(phiRef)*np.sqrt(1+k)))
-        # thetaRef = 0
 
         return phiRef, thetaRef
 
     def calculateError(self, x, setpoints):
-        # setpoints = [alt, roll, pitch, yaw]
+        '''setpoints = [alt, roll, pitch, yaw]'''
         altError = setpoints[0] - x[11]
         xError = setpoints[1] - x[9]
         yError = setpoints[2] - x[10]
